@@ -128,8 +128,8 @@ def process_ums_file():
 
                 if "." in ew_row[12]:
                     ew_hours = int(ew_row[12].split(".")[0])
-                else:
-                    ew_hours = int(ew_row[12])
+                else: # 如果没有小数点，那么格式就为"7小时"，需要截取"小时"前面的数字
+                    ew_hours = int(ew_row[12].split("小时")[0])
 
                 # 如果ew_date中包含date，并且ew_hours不等于hours，就打印出来
                 if ums_date in ew_date and ums_hours != ew_hours:
@@ -144,32 +144,29 @@ def process_ums_file():
                     dif_text.insert(tk.END, f"企业微信 缺少 {ums_date} 的记录!!!\n")
 
         # 遍历ew_filtered_data中的每一行
-        ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
         for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
             ew_date = ew_row[0]
-            ew_count += 1
             if "." in ew_row[12]:
                 ew_hours = int(ew_row[12].split(".")[0])
-            else:
-                ew_hours = int(ew_row[12])
+            else: # 如果没有小数点，那么格式就为"7小时"，需要截取"小时"前面的数字
+                ew_hours = int(ew_row[12].split("小时")[0])
             
             # 遍历ums_temp_data中的每一行
-            for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
+            for ums_index, ums_row in ums_temp_data.iterrows(): # 这个ums_index是从0开始的，符合常规逻辑
                 ums_date = ums_row['工时日期']
                 ums_hours = ums_row['工时(h)']
+
                 # 如果ew_date中包含date，并且ew_hours不等于hours，就打印出来
                 if ums_date in ew_date and ums_hours == ew_hours:
                     break
                 if ums_date in ew_date and ums_hours != ew_hours:
+                    # 将结果写入dif_text中
+                    dif_text.insert(tk.END, f"工时不对!!! ums日期: {ums_date}, ums工时(h): {ums_hours}, 企业微信日期: {ew_date}, 企业微信工时: {ew_hours}\n")
                     break
                 # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
-                if ew_count == ew_filtered_data.shape[0]:
+                if ums_index == ums_temp_data.shape[0] - 1:
                     dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
                     break
-
-
-
-            
     except Exception as e:
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
