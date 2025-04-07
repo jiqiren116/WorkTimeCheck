@@ -214,6 +214,12 @@ totaltime_text.pack(pady=10)
 separator = tk.Frame(root, height=2, bd=1, relief=tk.SUNKEN)
 separator.pack(fill=tk.X, padx=5, pady=5)
 
+# 创建一个label，用于显示提示信息
+info_label = tk.Label(root, text="如果 UMS 工时和 企业微信 工时 不一致，再点击下面的按钮")
+# 将label字体设置为红色，并加粗放大
+info_label.config(fg="red", font=("Arial", 12, "bold"))
+info_label.pack(pady=10)
+
 diff_frame = tk.Frame(root)
 diff_frame.pack(pady=10)
 open_ums_file_button = tk.Button(diff_frame, text="选择UMS导出的Excel文件", command=open_ums_file)
