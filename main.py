@@ -1,5 +1,6 @@
 import pandas as pd
 import tkinter as tk
+import os
 from tkinter import filedialog
 from tkinter import messagebox
 
@@ -38,15 +39,21 @@ def calculate_overtime_hours(file_path):
     # 第13列 列名为 "假勤申请"
     return calculate_hours(file_path, 13, "加班", r'加班(\d+\.\d+)小时')
 
-def open_file():
+def select_file(filetypes, startswith, endswith):
     # 打开文件选择对话框
-    file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
+    file_path = filedialog.askopenfilename(filetypes=filetypes)
     
-    # 截取file_path最后一个 / 后的文件名
-    file_name = file_path.split("/")[-1]
+    # 截取文件名
+    file_name = os.path.basename(file_path)
     # 判断file_name是否满足条件
-    if file_path and file_name.startswith("上下班打卡") and file_name.endswith(".xlsx"):
+    if file_path and file_name.startswith(startswith) and file_name.endswith(endswith):
+        return file_path
+    else:
+        return None
 
+def open_file():
+    file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
+    if file_path:
         # 计算加班时长 和 总工时
         overtime_hours = calculate_overtime_hours(file_path)
         total_hours = calculate_total_hours(file_path) # 计算总工时
@@ -63,13 +70,9 @@ def open_file():
 
 def open_ums_file():
     global DIFF_UMS_FILE_PATH  # 声明为全局变量
-    # 打开文件选择对话框
-    file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
 
-    # 截取file_path最后一个 / 后的文件名
-    file_name = file_path.split("/")[-1]
-    # 判断file_name是否满足条件
-    if file_path and file_name.startswith("export") and file_name.endswith(".xls"):
+    file_path = select_file([("Excel files", "*.xlsx *.xls")], "export", ".xls")
+    if file_path:
         dif_text.delete(1.0, tk.END)
         DIFF_UMS_FILE_PATH = file_path
     else:
@@ -78,16 +81,11 @@ def open_ums_file():
 
 def open_ew_file():
     global DIFF_EW_FILE_PATH  # 声明为全局变量
-    # 打开文件选择对话框
-    file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
-
-    # 截取file_path最后一个 / 后的文件名
-    file_name = file_path.split("/")[-1]
-    # 判断file_name是否满足条件
-    if file_path and file_name.startswith("上下班打卡") and file_name.endswith(".xlsx"):
+ 
+    file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
+    if file_path:
         dif_text.delete(1.0, tk.END)
         DIFF_EW_FILE_PATH = file_path
-        # process_ums_file(file_path)
     else:
         messagebox.showerror("错误", "请选择正确的文件")
 
@@ -145,8 +143,6 @@ def process_ums_file():
                 if ew_count == ew_filtered_data.shape[0]:
                     dif_text.insert(tk.END, f"企业微信 缺少 {ums_date} 的记录!!!\n")
 
-                # TODO: 现在只能判断ums比ew多的情况，还需要判断ums比ew少的情况
-        
         # 遍历ew_filtered_data中的每一行
         ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
         for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
@@ -182,7 +178,7 @@ def process_ums_file():
 # 创建主窗口
 root = tk.Tk()
 root.title("工时统计工具")
-root.geometry("700x300")  # 设置窗口大小
+root.geometry("700x400")  # 设置窗口大小
 
 open_ew_file_frame = tk.Frame(root)
 open_ew_file_frame.pack(pady=10)
@@ -229,7 +225,12 @@ open_ums_file_button.pack(side=tk.LEFT, padx=5)
 open_ew_file_button2 = tk.Button(diff_frame, text="选择企业微信导出的Excel文件", command=open_ew_file)
 open_ew_file_button2.pack(side=tk.LEFT, padx=5)
 
-execute_diff_button = tk.Button(diff_frame, text="执行对比", command=process_ums_file)
+diff_frame2 = tk.Frame(root)
+diff_frame2.pack(pady=10)
+# 创建label并添加到Frame中
+diff_label = tk.Label(diff_frame2, text="选中两个文件后，点击执行对比，查看差异:")
+diff_label.pack(side=tk.LEFT)
+execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
 execute_diff_button.pack(side=tk.LEFT, padx=5)
 
 
@@ -241,9 +242,6 @@ dif_text.pack(pady=10)
 scrollbar = tk.Scrollbar(root, orient='vertical',command=dif_text.yview)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 dif_text.config(yscrollcommand=scrollbar.set)
-
-# test 测试第一次提交到github
-
 
 # 运行主循环
 root.mainloop()
