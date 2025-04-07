@@ -195,6 +195,8 @@ scrollbar = tk.Scrollbar(root, orient='vertical',command=dif_text.yview)
 scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 dif_text.config(yscrollcommand=scrollbar.set)
 
+# test 测试第一次提交到github
+
 
 # 运行主循环
 root.mainloop()
