@@ -41,7 +41,12 @@ def calculate_overtime_hours(file_path):
 def open_file():
     # 打开文件选择对话框
     file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
-    if file_path:
+    
+    # 截取file_path最后一个 / 后的文件名
+    file_name = file_path.split("/")[-1]
+    # 判断file_name是否满足条件
+    if file_path and file_name.startswith("上下班打卡") and file_name.endswith(".xlsx"):
+
         # 计算加班时长 和 总工时
         overtime_hours = calculate_overtime_hours(file_path)
         total_hours = calculate_total_hours(file_path) # 计算总工时
@@ -53,24 +58,38 @@ def open_file():
             # 将总工时显示在文本框中
             totaltime_text.delete(1.0, tk.END)
             totaltime_text.insert(tk.END, f" {total_hours}小时")
+    else:
+        messagebox.showerror("错误", "请选择正确的文件")
 
 def open_ums_file():
     global DIFF_UMS_FILE_PATH  # 声明为全局变量
     # 打开文件选择对话框
     file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
-    if file_path:
+
+    # 截取file_path最后一个 / 后的文件名
+    file_name = file_path.split("/")[-1]
+    # 判断file_name是否满足条件
+    if file_path and file_name.startswith("export") and file_name.endswith(".xls"):
         dif_text.delete(1.0, tk.END)
         DIFF_UMS_FILE_PATH = file_path
-        # process_ums_file(file_path)
+    else:
+        messagebox.showerror("错误", "请选择正确的文件")
+
 
 def open_ew_file():
     global DIFF_EW_FILE_PATH  # 声明为全局变量
     # 打开文件选择对话框
     file_path = filedialog.askopenfilename(filetypes=[("Excel files", "*.xlsx *.xls")])
-    if file_path:
+
+    # 截取file_path最后一个 / 后的文件名
+    file_name = file_path.split("/")[-1]
+    # 判断file_name是否满足条件
+    if file_path and file_name.startswith("上下班打卡") and file_name.endswith(".xlsx"):
         dif_text.delete(1.0, tk.END)
         DIFF_EW_FILE_PATH = file_path
         # process_ums_file(file_path)
+    else:
+        messagebox.showerror("错误", "请选择正确的文件")
 
 def process_ums_file():
     # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
@@ -100,33 +119,61 @@ def process_ums_file():
 
         # 便利ums_temp_data中的每一行
         for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
-            date = ums_row['工时日期']
-            hours = ums_row['工时(h)']
+            ums_date = ums_row['工时日期']
+            ums_hours = ums_row['工时(h)']
 
-            count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
+            ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
             # 遍历ew_filtered_data中的每一行
             for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
-                count += 1
-                temp_date = ew_row[0]
+                ew_count += 1
+                ew_date = ew_row[0]
 
                 if "." in ew_row[12]:
-                    temp_hours = int(ew_row[12].split(".")[0])
+                    ew_hours = int(ew_row[12].split(".")[0])
                 else:
-                    temp_hours = int(ew_row[12])
+                    ew_hours = int(ew_row[12])
 
-                # 如果temp_date中包含date，并且temp_hours不等于hours，就打印出来
-                if date in temp_date and hours != temp_hours:
+                # 如果ew_date中包含date，并且ew_hours不等于hours，就打印出来
+                if ums_date in ew_date and ums_hours != ew_hours:
                     # 将结果写入dif_text中
-                    dif_text.insert(tk.END, f"工时不对!!! ums日期: {date}, ums工时(h): {hours}, 企业微信日期: {temp_date}, 企业微信工时: {temp_hours}\n")
+                    dif_text.insert(tk.END, f"工时不对!!! ums日期: {ums_date}, ums工时(h): {ums_hours}, 企业微信日期: {ew_date}, 企业微信工时: {ew_hours}\n")
                     break
-                if date in temp_date and hours== temp_hours:
+                if ums_date in ew_date and ums_hours== ew_hours:
                     break
     
-                # 如果遍历完，date一直没有在temp_date中出现，将结果写入dif_text中
-                if count == ew_filtered_data.shape[0]:
-                    dif_text.insert(tk.END, f"企业微信 缺少 {date} 的记录!!!\n")
+                # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
+                if ew_count == ew_filtered_data.shape[0]:
+                    dif_text.insert(tk.END, f"企业微信 缺少 {ums_date} 的记录!!!\n")
 
                 # TODO: 现在只能判断ums比ew多的情况，还需要判断ums比ew少的情况
+        
+        # 遍历ew_filtered_data中的每一行
+        ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
+        for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
+            ew_date = ew_row[0]
+            ew_count += 1
+            if "." in ew_row[12]:
+                ew_hours = int(ew_row[12].split(".")[0])
+            else:
+                ew_hours = int(ew_row[12])
+            
+            # 遍历ums_temp_data中的每一行
+            for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
+                ums_date = ums_row['工时日期']
+                ums_hours = ums_row['工时(h)']
+                # 如果ew_date中包含date，并且ew_hours不等于hours，就打印出来
+                if ums_date in ew_date and ums_hours == ew_hours:
+                    break
+                if ums_date in ew_date and ums_hours != ew_hours:
+                    break
+                # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
+                if ew_count == ew_filtered_data.shape[0]:
+                    dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
+                    break
+
+
+
+            
     except Exception as e:
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
