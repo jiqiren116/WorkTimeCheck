@@ -131,10 +131,10 @@ def process_ums_file():
                 else: # 如果没有小数点，那么格式就为"7小时"，需要截取"小时"前面的数字
                     ew_hours = int(ew_row[12].split("小时")[0])
 
-                # 如果ew_date中包含date，并且ew_hours不等于hours，就打印出来
+                # 如果ew_date中包含date，并且ew_hours不等于hours
                 if ums_date in ew_date and ums_hours != ew_hours:
                     # 将结果写入dif_text中
-                    dif_text.insert(tk.END, f"工时不对!!! ums日期: {ums_date}, ums工时(h): {ums_hours}, 企业微信日期: {ew_date}, 企业微信工时: {ew_hours}\n")
+                    dif_text.insert(tk.END, f"工时不对!!! 日期: {ums_date}, ums工时: {ums_hours}, 企业微信工时: {ew_hours}\n")
                     break
                 if ums_date in ew_date and ums_hours== ew_hours:
                     break
@@ -156,17 +156,70 @@ def process_ums_file():
                 ums_date = ums_row['工时日期']
                 ums_hours = ums_row['工时(h)']
 
-                # 如果ew_date中包含date，并且ew_hours不等于hours，就打印出来
-                if ums_date in ew_date and ums_hours == ew_hours:
+                # 如果ew_date中包含date
+                if ums_date in ew_date:
                     break
-                if ums_date in ew_date and ums_hours != ew_hours:
-                    # 将结果写入dif_text中
-                    dif_text.insert(tk.END, f"工时不对!!! ums日期: {ums_date}, ums工时(h): {ums_hours}, 企业微信日期: {ew_date}, 企业微信工时: {ew_hours}\n")
-                    break
+                
                 # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
                 if ums_index == ums_temp_data.shape[0] - 1:
                     dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
                     break
+
+        ###### 处理dif_text中ums相同日期的工时 #####
+        # 确定dif_text中是否有内容
+        if dif_text.get("1.0", tk.END) == "\n":
+            messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
+            return None
+        # 提取dif_text中的内容，用换行符分割
+        content = dif_text.get("1.0", tk.END)
+        lines = content.split("\n")
+        # 确保lines不为空
+        if not lines:
+            messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
+            return None
+        pre_date = ""
+        same_date_hours = 0
+        # 定义一个数组，存储日期
+        dates_arr = []
+        # 遍历lines中的每一行
+        for line in lines:
+            # 如果line中包含"工时不对"
+            if "工时不对" in line:
+                # 具体格式为 "工时不对!!! 日期: 2025/02/08, ums工时: 8, 企业微信工时: 11"，需要截取"日期: "后面的内容，和"ums工时: "后面的内容，和"企业微信工时: "后面的内容
+                date = line.split("日期: ")[1].split(",")[0]
+                ums_hours = int(line.split("ums工时: ")[1].split(",")[0])
+                ew_hours = int(line.split("企业微信工时: ")[1])
+                
+                if pre_date !=date:
+                    pre_date = date
+                    same_date_hours = ums_hours
+                    continue
+                else:
+                    same_date_hours += ums_hours
+                    if same_date_hours == ew_hours:
+                        dates_arr.append(date)
+
+        to_remove = []
+        for i, line in enumerate(lines):
+            if "工时不对" in line:
+                date = line.split("日期: ")[1].split(",")[0]
+                if date in dates_arr:
+                    print('date in dates_arr', date, flush=True)
+                    to_remove.append(i)
+                else:
+                    print('date not in dates_arr', date, flush=True)
+
+        # 倒序删除
+        for index in sorted(to_remove, reverse=True):
+            del lines[index]
+        
+        # # 将lines中的内容写入dif_text中
+        dif_text.delete("1.0", tk.END)
+        for line in lines:
+            dif_text.insert(tk.END, line + "\n")
+
+        dif_text.tag_add("red", "1.0", "end")
+        dif_text.tag_config("red", foreground="red")
     except Exception as e:
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
