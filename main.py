@@ -6,6 +6,7 @@ from tkinter import messagebox
 
 DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
+key_sequence = []  # 用于存储按键序列，彩蛋
 
 def calculate_hours(file_path, column_index, keyword, pattern):
     try:
@@ -48,12 +49,17 @@ def select_file(filetypes, startswith, endswith):
     # 判断file_name是否满足条件
     if file_path and file_name.startswith(startswith) and file_name.endswith(endswith):
         return file_path
+    elif file_path == "": # 处理选择文件对话框中点击取消的情况
+        return "file_path is empty" 
     else:
         return None
 
 def open_file():
     file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
     if file_path:
+        if file_path == "file_path is empty":
+            return None
+        
         # 计算加班时长 和 总工时
         overtime_hours = calculate_overtime_hours(file_path)
         total_hours = calculate_total_hours(file_path) # 计算总工时
@@ -66,17 +72,20 @@ def open_file():
             totaltime_text.delete(1.0, tk.END)
             totaltime_text.insert(tk.END, f" {total_hours}小时")
     else:
-        messagebox.showerror("错误", "请选择正确的文件")
+        messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
 def open_ums_file():
     global DIFF_UMS_FILE_PATH  # 声明为全局变量
 
     file_path = select_file([("Excel files", "*.xlsx *.xls")], "export", ".xls")
     if file_path:
+        if file_path == "file_path is empty":
+            return None
+        
         dif_text.delete(1.0, tk.END)
         DIFF_UMS_FILE_PATH = file_path
     else:
-        messagebox.showerror("错误", "请选择正确的文件")
+        messagebox.showerror("文件选择错误", "请选择从 UMS 导出的文件\n 格式为 “export.xls")
 
 
 def open_ew_file():
@@ -84,10 +93,13 @@ def open_ew_file():
  
     file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
     if file_path:
+        if file_path == "file_path is empty":
+            return None
+        
         dif_text.delete(1.0, tk.END)
         DIFF_EW_FILE_PATH = file_path
     else:
-        messagebox.showerror("错误", "请选择正确的文件")
+        messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
 def process_ums_file():
     # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
@@ -104,8 +116,10 @@ def process_ums_file():
         ums_data = pd.read_html(DIFF_UMS_FILE_PATH, encoding='utf-8')[0]  # [0] 表示读取第一个表格
         ew_data = pd.read_excel(DIFF_EW_FILE_PATH, header=None, sheet_name=0)  # 读取第一个sheet
 
-        # 获取ums_data中列名为 工时日期 和 工时(h) 的列
-        ums_temp_data = ums_data[['工时日期', '工时(h)']]
+        # 获取ums_data中列名为 工时日期 和 工时(h) 、状态的列
+        ums_temp_data = ums_data[['工时日期', '工时(h)', '状态']]
+        # 挑选出状态为 “审批完成” 的行赋值给ums_temp_data
+        ums_temp_data = ums_temp_data[ums_temp_data['状态'] == '审批完成']
         # 将 “工时日期” 这一列格式为"2025-03-01"转换为"2025/03/01"
         ums_temp_data['工时日期'] = ums_temp_data['工时日期'].str.replace('-', '/')
 
@@ -119,6 +133,9 @@ def process_ums_file():
         for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
             ums_date = ums_row['工时日期']
             ums_hours = ums_row['工时(h)']
+            # 确保ums_hours是整数类型
+            if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
+                ums_hours = int(ums_hours)
 
             ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
             # 遍历ew_filtered_data中的每一行
@@ -151,17 +168,22 @@ def process_ums_file():
             else: # 如果没有小数点，那么格式就为"7小时"，需要截取"小时"前面的数字
                 ew_hours = int(ew_row[12].split("小时")[0])
             
+            ums_index = 0 # 计数器，用于记录遍历了ums_temp_data中的多少行
             # 遍历ums_temp_data中的每一行
-            for ums_index, ums_row in ums_temp_data.iterrows(): # 这个ums_index是从0开始的，符合常规逻辑
+            for index, ums_row in ums_temp_data.iterrows(): # 这个ums_index是从0开始的，符合常规逻辑
+                ums_index += 1
                 ums_date = ums_row['工时日期']
                 ums_hours = ums_row['工时(h)']
+                # 确保ums_hours是整数类型
+                if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
+                    ums_hours = int(ums_hours)
 
                 # 如果ew_date中包含date
                 if ums_date in ew_date:
                     break
                 
                 # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
-                if ums_index == ums_temp_data.shape[0] - 1:
+                if ums_index == ums_temp_data.shape[0]:
                     dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
                     break
 
@@ -221,11 +243,26 @@ def process_ums_file():
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
     
+# 处理按键事件，彩蛋
+def on_key_press(event):
+    global key_sequence
+    # 获取按键的字符
+    key = event.char
+
+    # 如果按键是数字键，添加到序列中
+    if key.isdigit():
+        key_sequence.append(key)
+
+        # 检查是否匹配目标序列 "1024"
+        if ''.join(key_sequence[-4:]) == "1024":
+            # 弹出消息框
+            messagebox.showinfo("彩蛋", "作者是 robot-x")
+            key_sequence = []  # 重置按键序列
 
 # 创建主窗口
 root = tk.Tk()
 root.title("工时统计工具")
-root.geometry("700x400")  # 设置窗口大小
+root.geometry("460x500")  # 设置窗口大小
 
 open_ew_file_frame = tk.Frame(root)
 open_ew_file_frame.pack(pady=10)
@@ -286,15 +323,12 @@ diff_label.pack(side=tk.LEFT)
 execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
 execute_diff_button.pack(side=tk.LEFT, padx=5)
 
-
 # 绘制一个文本框，带滚动条，用于显示结果
-dif_text = tk.Text(root, height=10, width=320)
+dif_text = tk.Text(root, height=100, width=320)
 dif_text.pack(pady=10)
 
-# 创建滚动条并与文本框关联
-scrollbar = tk.Scrollbar(root, orient='vertical',command=dif_text.yview)
-scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-dif_text.config(yscrollcommand=scrollbar.set)
+# 绑定键盘事件
+root.bind("<Key>", on_key_press)
 
 # 运行主循环
 root.mainloop()
