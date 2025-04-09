@@ -3,6 +3,7 @@ import tkinter as tk
 import os
 from tkinter import filedialog
 from tkinter import messagebox
+import re
 
 DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
@@ -140,7 +141,7 @@ def process_ums_file():
         ums_temp_data['工时日期'] = ums_temp_data['工时日期'].str.replace('-', '/')
 
         num_rows = ew_data.shape[0]
-        ew_temp_data = ew_data.loc[4: num_rows - 1, [0, 12]]
+        ew_temp_data = ew_data.loc[4: num_rows - 1, [0, 11,12,13]]
 
         # 筛选出包含“小时”的行
         ew_filtered_data = ew_temp_data[ew_temp_data[12].astype(str).str.contains("小时")]
@@ -159,10 +160,31 @@ def process_ums_file():
                 ew_count += 1
                 ew_date = ew_row[0]
 
-                if "." in ew_row[12]:
-                    ew_hours = int(ew_row[12].split(".")[0])
-                else: # 如果没有小数点，那么格式就为"7小时"，需要截取"小时"前面的数字
-                    ew_hours = int(ew_row[12].split("小时")[0])
+                temp_hour = 0
+                # 如果ew_row[11]中包含“小时”，说明这最起码是8h
+                if "小时" in ew_row[11]:
+                    temp_hour = 8
+                # 如果ew_row[13]中包含“加班”，说明这是加班或者病假等
+                if "小时" in ew_row[13]:
+                    # 按照正则表达式提取出数字 "'加班(\d+\.\d+)小时'"
+                    if "加班" in ew_row[13]:
+                        pattern = r'加班(\d+\.\d+)小时'
+                        match = re.search(pattern, ew_row[13])
+                        if match:
+                            temp_overtime = float(match.group(1))
+                            temp_hour = int(temp_hour + temp_overtime)
+                    if "病假" in ew_row[13]:
+                        pattern = r'病假(\d+\.\d+)小时'
+                        match = re.search(pattern, ew_row[13])
+                        if match:
+                            temp_sicktime = float(match.group(1))
+                            temp_hour = int(temp_hour - temp_sicktime)
+                            # 如果temp_hour小于0,弹窗报错
+                            if temp_hour < 0:
+                                messagebox.showerror("错误", f"时间计算错误，{ums_date} 的 企业微信 工时为 {temp_hour} 小时，小于0")
+                                dif_text.config(state=tk.DISABLED)
+                                return None
+                ew_hours = int(temp_hour)
 
                 # 如果ew_date中包含date，并且ew_hours不等于hours
                 if ums_date in ew_date and ums_hours != ew_hours:
@@ -179,10 +201,6 @@ def process_ums_file():
         # 遍历ew_filtered_data中的每一行
         for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
             ew_date = ew_row[0]
-            if "." in ew_row[12]:
-                ew_hours = int(ew_row[12].split(".")[0])
-            else: # 如果没有小数点，那么格式就为"7小时"，需要截取"小时"前面的数字
-                ew_hours = int(ew_row[12].split("小时")[0])
             
             ums_index = 0 # 计数器，用于记录遍历了ums_temp_data中的多少行
             # 遍历ums_temp_data中的每一行
