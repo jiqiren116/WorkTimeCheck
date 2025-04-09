@@ -204,10 +204,7 @@ def process_ums_file():
             if "工时不对" in line:
                 date = line.split("日期: ")[1].split(",")[0]
                 if date in dates_arr:
-                    print('date in dates_arr', date, flush=True)
                     to_remove.append(i)
-                else:
-                    print('date not in dates_arr', date, flush=True)
 
         # 倒序删除
         for index in sorted(to_remove, reverse=True):
