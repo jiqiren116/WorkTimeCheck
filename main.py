@@ -65,12 +65,16 @@ def open_file():
         total_hours = calculate_total_hours(file_path) # 计算总工时
         if total_hours is not None:
             # 将加班时长显示在文本框中
+            overtime_text.config(state=tk.NORMAL)
             overtime_text.delete(1.0, tk.END)
             overtime_text.insert(tk.END, f" {overtime_hours}小时")
+            overtime_text.config(state=tk.DISABLED)
 
             # 将总工时显示在文本框中
+            totaltime_text.config(state=tk.NORMAL)
             totaltime_text.delete(1.0, tk.END)
             totaltime_text.insert(tk.END, f" {total_hours}小时")
+            totaltime_text.config(state=tk.DISABLED)
     else:
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
@@ -102,6 +106,10 @@ def open_ew_file():
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
 def process_ums_file():
+    dif_text.config(state=tk.NORMAL)
+    # 清空dif_text中的内容
+    dif_text.delete(1.0, tk.END)
+    
     # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
     if DIFF_UMS_FILE_PATH == "" and DIFF_EW_FILE_PATH == "":
         messagebox.showerror("错误", "请先选择ums和企业微信的导出文件")
@@ -239,7 +247,9 @@ def process_ums_file():
 
         dif_text.tag_add("red", "1.0", "end")
         dif_text.tag_config("red", foreground="red")
+        dif_text.config(state=tk.DISABLED)
     except Exception as e:
+        dif_text.config(state=tk.DISABLED)
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
     
@@ -259,10 +269,29 @@ def on_key_press(event):
             messagebox.showinfo("彩蛋", "作者是 robot-x")
             key_sequence = []  # 重置按键序列
 
+# 用于使窗口居中
+def center_window(root):
+    # 获取屏幕尺寸
+    screen_width = root.winfo_screenwidth()
+    screen_height = root.winfo_screenheight()
+
+    # 获取窗口大小
+    window_width = root.winfo_width()
+    window_height = root.winfo_height()
+
+    # 计算窗口位置
+    x_cordinate = int((screen_width/2) - (window_width/2))
+    y_cordinate = int((screen_height/2) - (window_height/2))
+
+    # 设置窗口位置
+    root.geometry(f'+{x_cordinate - 300}+{y_cordinate - 300}')
+
 # 创建主窗口
 root = tk.Tk()
 root.title("工时统计工具")
 root.geometry("460x500")  # 设置窗口大小
+# 调用函数，使窗口居中
+center_window(root)
 
 open_ew_file_frame = tk.Frame(root)
 open_ew_file_frame.pack(pady=10)
@@ -285,6 +314,8 @@ overtime_label.pack(side=tk.LEFT)
 
 overtime_text = tk.Text(overtime_frame, height=1, width=10)
 overtime_text.pack(side=tk.LEFT, padx=5)
+# 设置文本框不可以手动更改
+overtime_text.config(state=tk.DISABLED)
 
 ### 总工时
 totaltime_frame = tk.Frame(root)
@@ -296,6 +327,8 @@ totaltime_label.pack(side=tk.LEFT)
 # 创建文本框用于显示结果
 totaltime_text = tk.Text(totaltime_frame, height=1, width=10)
 totaltime_text.pack(pady=10)
+# 设置文本框不可以手动更改
+totaltime_text.config(state=tk.DISABLED)
 
 # 画一条横线来分隔
 separator = tk.Frame(root, height=2, bd=1, relief=tk.SUNKEN)
@@ -326,6 +359,7 @@ execute_diff_button.pack(side=tk.LEFT, padx=5)
 # 绘制一个文本框，带滚动条，用于显示结果
 dif_text = tk.Text(root, height=100, width=320)
 dif_text.pack(pady=10)
+dif_text.config(state=tk.DISABLED)
 
 # 绑定键盘事件
 root.bind("<Key>", on_key_press)
