@@ -114,162 +114,17 @@ def process_ums_file():
     dif_text.config(state=tk.NORMAL)
     # 清空dif_text中的内容
     dif_text.delete(1.0, tk.END)
-    
-    # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
-    if DIFF_UMS_FILE_PATH == "" and DIFF_EW_FILE_PATH == "":
-        messagebox.showerror("错误", "请先选择ums和企业微信的导出文件")
-        dif_text.config(state=tk.DISABLED)
-        return None
-    elif DIFF_UMS_FILE_PATH == "":
-        messagebox.showerror("错误", "请先选择ums的导出文件")
-        dif_text.config(state=tk.DISABLED)
-        return None
-    elif DIFF_EW_FILE_PATH == "":
-        messagebox.showerror("错误", "请先选择企业微信的导出文件")
-        dif_text.config(state=tk.DISABLED)
-        return None
+   
     try:
-        ums_data = pd.read_html(DIFF_UMS_FILE_PATH, encoding='utf-8')[0]  # [0] 表示读取第一个表格
-        ew_data = pd.read_excel(DIFF_EW_FILE_PATH, header=None, sheet_name=0)  # 读取第一个sheet
-
-        # 获取ums_data中列名为 工时日期 和 工时(h) 、状态的列
-        ums_temp_data = ums_data[['工时日期', '工时(h)', '状态']]
-        # 挑选出状态为 “审批完成”或者是“待审批” 的行赋值给ums_temp_data
-        # ums_temp_data = ums_temp_data[ums_temp_data['状态'] == '审批完成']
-        ums_temp_data = ums_temp_data[ums_temp_data['状态'].isin(['审批完成', '待审批'])]
-        # 将 “工时日期” 这一列格式为"2025-03-01"转换为"2025/03/01"
-        ums_temp_data['工时日期'] = ums_temp_data['工时日期'].str.replace('-', '/')
-
-        num_rows = ew_data.shape[0]
-        ew_temp_data = ew_data.loc[4: num_rows - 1, [0, 11,12,13]]
-
-        # 筛选出包含“小时”的行
-        ew_filtered_data = ew_temp_data[ew_temp_data[12].astype(str).str.contains("小时")]
-
-        # 便利ums_temp_data中的每一行
-        for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
-            ums_date = ums_row['工时日期']
-            ums_hours = ums_row['工时(h)']
-            # 确保ums_hours是整数类型
-            if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
-                ums_hours = int(ums_hours)
-
-            ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
-            # 遍历ew_filtered_data中的每一行
-            for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
-                ew_count += 1
-                ew_date = ew_row[0]
-
-                temp_hour = 0
-                # 如果ew_row[11]中包含“小时”，说明这最起码是8h
-                if "小时" in ew_row[11]:
-                    temp_hour = 8
-                # 如果ew_row[13]中包含“加班”，说明这是加班或者病假等
-                if "小时" in ew_row[13]:
-                    # 按照正则表达式提取出数字 "'加班(\d+\.\d+)小时'"
-                    if "加班" in ew_row[13]:
-                        pattern = r'加班(\d+\.\d+)小时'
-                        match = re.search(pattern, ew_row[13])
-                        if match:
-                            temp_overtime = float(match.group(1))
-                            temp_hour = int(temp_hour + temp_overtime)
-                    if "病假" in ew_row[13]:
-                        pattern = r'病假(\d+\.\d+)小时'
-                        match = re.search(pattern, ew_row[13])
-                        if match:
-                            temp_sicktime = float(match.group(1))
-                            temp_hour = int(temp_hour - temp_sicktime)
-                            # 如果temp_hour小于0,弹窗报错
-                            if temp_hour < 0:
-                                messagebox.showerror("错误", f"时间计算错误，{ums_date} 的 企业微信 工时为 {temp_hour} 小时，小于0")
-                                dif_text.config(state=tk.DISABLED)
-                                return None
-                ew_hours = int(temp_hour)
-
-                # 如果ew_date中包含date，并且ew_hours不等于hours
-                if ums_date in ew_date and ums_hours != ew_hours:
-                    # 将结果写入dif_text中
-                    dif_text.insert(tk.END, f"工时不对!!! 日期: {ums_date}, ums工时: {ums_hours}, 企业微信工时: {ew_hours}\n")
-                    break
-                if ums_date in ew_date and ums_hours== ew_hours:
-                    break
-    
-                # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
-                if ew_count == ew_filtered_data.shape[0]:
-                    dif_text.insert(tk.END, f"企业微信 缺少 {ums_date} 的记录!!!\n")
-
-        # 遍历ew_filtered_data中的每一行
-        for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
-            ew_date = ew_row[0]
-            
-            ums_index = 0 # 计数器，用于记录遍历了ums_temp_data中的多少行
-            # 遍历ums_temp_data中的每一行
-            for index, ums_row in ums_temp_data.iterrows(): # 这个ums_index是从0开始的，符合常规逻辑
-                ums_index += 1
-                ums_date = ums_row['工时日期']
-                ums_hours = ums_row['工时(h)']
-                # 确保ums_hours是整数类型
-                if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
-                    ums_hours = int(ums_hours)
-
-                # 如果ew_date中包含date
-                if ums_date in ew_date:
-                    break
-                
-                # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
-                if ums_index == ums_temp_data.shape[0]:
-                    dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
-                    break
-
-        ###### 处理dif_text中ums相同日期的工时 #####
-        # 确定dif_text中是否有内容
-        if dif_text.get("1.0", tk.END) == "\n":
-            messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
+        # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
+        if not validate_file_paths():
             return None
-        # 提取dif_text中的内容，用换行符分割
-        content = dif_text.get("1.0", tk.END)
-        lines = content.split("\n")
-        # 确保lines不为空
-        if not lines:
-            messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
-            return None
-        pre_date = ""
-        same_date_hours = 0
-        # 定义一个数组，存储日期
-        dates_arr = []
-        # 遍历lines中的每一行
-        for line in lines:
-            # 如果line中包含"工时不对"
-            if "工时不对" in line:
-                # 具体格式为 "工时不对!!! 日期: 2025/02/08, ums工时: 8, 企业微信工时: 11"，需要截取"日期: "后面的内容，和"ums工时: "后面的内容，和"企业微信工时: "后面的内容
-                date = line.split("日期: ")[1].split(",")[0]
-                ums_hours = int(line.split("ums工时: ")[1].split(",")[0])
-                ew_hours = int(line.split("企业微信工时: ")[1])
-                
-                if pre_date !=date:
-                    pre_date = date
-                    same_date_hours = ums_hours
-                    continue
-                else:
-                    same_date_hours += ums_hours
-                    if same_date_hours == ew_hours:
-                        dates_arr.append(date)
 
-        to_remove = []
-        for i, line in enumerate(lines):
-            if "工时不对" in line:
-                date = line.split("日期: ")[1].split(",")[0]
-                if date in dates_arr:
-                    to_remove.append(i)
+        ums_temp_data, ew_filtered_data = read_and_process_data() # 读取数据
 
-        # 倒序删除
-        for index in sorted(to_remove, reverse=True):
-            del lines[index]
-        
-        # # 将lines中的内容写入dif_text中
-        dif_text.delete("1.0", tk.END)
-        for line in lines:
-            dif_text.insert(tk.END, line + "\n")
+        compare_hours(ums_temp_data, ew_filtered_data) # 比较工时
+
+        handle_same_date_hours() # 处理dif_text中ums相同日期的工时
 
         dif_text.tag_add("red", "1.0", "end")
         dif_text.tag_config("red", foreground="red")
@@ -278,7 +133,171 @@ def process_ums_file():
         dif_text.config(state=tk.DISABLED)
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
+
+# 用于判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
+def validate_file_paths():
+    if DIFF_UMS_FILE_PATH == "" and DIFF_EW_FILE_PATH == "":
+        messagebox.showerror("错误", "请先选择ums和企业微信的导出文件")
+        dif_text.config(state=tk.DISABLED)
+        return False
+    elif DIFF_UMS_FILE_PATH == "":
+        messagebox.showerror("错误", "请先选择ums的导出文件")
+        dif_text.config(state=tk.DISABLED)
+        return False
+    elif DIFF_EW_FILE_PATH == "":
+        messagebox.showerror("错误", "请先选择企业微信的导出文件")
+        dif_text.config(state=tk.DISABLED)
+        return False
+    return True
+
+def read_and_process_data():
+    ums_data = pd.read_html(DIFF_UMS_FILE_PATH, encoding='utf-8')[0]  # [0] 表示读取第一个表格
+    ew_data = pd.read_excel(DIFF_EW_FILE_PATH, header=None, sheet_name=0)  # 读取第一个sheet
+
+    # 获取ums_data中列名为 工时日期 和 工时(h) 、状态的列
+    ums_temp_data = ums_data[['工时日期', '工时(h)', '状态']]
+    # 挑选出状态为 “审批完成”或者是“待审批” 的行赋值给ums_temp_data
+    # ums_temp_data = ums_temp_data[ums_temp_data['状态'] == '审批完成']
+    ums_temp_data = ums_temp_data[ums_temp_data['状态'].isin(['审批完成', '待审批'])]
+    # 将 “工时日期” 这一列格式为"2025-03-01"转换为"2025/03/01"
+    ums_temp_data['工时日期'] = ums_temp_data['工时日期'].str.replace('-', '/')
+
+    num_rows = ew_data.shape[0]
+    ew_temp_data = ew_data.loc[4: num_rows - 1, [0, 11,12,13]]
+
+    # 筛选出包含“小时”的行
+    ew_filtered_data = ew_temp_data[ew_temp_data[12].astype(str).str.contains("小时")]
+
+    return ums_temp_data, ew_filtered_data
+
+def compare_hours(ums_temp_data, ew_filtered_data):
+    # 便利ums_temp_data中的每一行
+    for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
+        ums_date = ums_row['工时日期']
+        ums_hours = ums_row['工时(h)']
+        # 确保ums_hours是整数类型
+        if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
+            ums_hours = int(ums_hours)
+
+        ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
+        # 遍历ew_filtered_data中的每一行
+        for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
+            ew_count += 1
+            ew_date = ew_row[0]
+
+            temp_hour = 0
+            # 如果ew_row[11]中包含“小时”，说明这最起码是8h
+            if "小时" in ew_row[11]:
+                temp_hour = 8
+            # 如果ew_row[13]中包含“加班”，说明这是加班或者病假等
+            if "小时" in ew_row[13]:
+                # 按照正则表达式提取出数字 "'加班(\d+\.\d+)小时'"
+                if "加班" in ew_row[13]:
+                    pattern = r'加班(\d+\.\d+)小时'
+                    match = re.search(pattern, ew_row[13])
+                    if match:
+                        temp_overtime = float(match.group(1))
+                        temp_hour = int(temp_hour + temp_overtime)
+                if "病假" in ew_row[13]:
+                    pattern = r'病假(\d+\.\d+)小时'
+                    match = re.search(pattern, ew_row[13])
+                    if match:
+                        temp_sicktime = float(match.group(1))
+                        temp_hour = int(temp_hour - temp_sicktime)
+                        # 如果temp_hour小于0,弹窗报错
+                        if temp_hour < 0:
+                            messagebox.showerror("错误", f"时间计算错误，{ums_date} 的 企业微信 工时为 {temp_hour} 小时，小于0")
+                            dif_text.config(state=tk.DISABLED)
+                            return None
+            ew_hours = int(temp_hour)
+
+            # 如果ew_date中包含date，并且ew_hours不等于hours
+            if ums_date in ew_date and ums_hours != ew_hours:
+                # 将结果写入dif_text中
+                dif_text.insert(tk.END, f"工时不对!!! 日期: {ums_date}, ums工时: {ums_hours}, 企业微信工时: {ew_hours}\n")
+                break
+            if ums_date in ew_date and ums_hours== ew_hours:
+                break
+
+            # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
+            if ew_count == ew_filtered_data.shape[0]:
+                dif_text.insert(tk.END, f"企业微信 缺少 {ums_date} 的记录!!!\n")
+
+    # 遍历ew_filtered_data中的每一行
+    for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
+        ew_date = ew_row[0]
+        
+        ums_index = 0 # 计数器，用于记录遍历了ums_temp_data中的多少行
+        # 遍历ums_temp_data中的每一行
+        for index, ums_row in ums_temp_data.iterrows(): # 这个ums_index是从0开始的，符合常规逻辑
+            ums_index += 1
+            ums_date = ums_row['工时日期']
+            ums_hours = ums_row['工时(h)']
+            # 确保ums_hours是整数类型
+            if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
+                ums_hours = int(ums_hours)
+
+            # 如果ew_date中包含date
+            if ums_date in ew_date:
+                break
+            
+            # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
+            if ums_index == ums_temp_data.shape[0]:
+                dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
+                break
+
+# 处理dif_text中ums相同日期的工时
+def handle_same_date_hours():
+    ###### 处理dif_text中ums相同日期的工时 #####
+    # 确定dif_text中是否有内容
+    if dif_text.get("1.0", tk.END) == "\n":
+        messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
+        return None
+    # 提取dif_text中的内容，用换行符分割
+    content = dif_text.get("1.0", tk.END)
+    lines = content.split("\n")
+    # 确保lines不为空
+    if not lines:
+        messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
+        return None
+    pre_date = ""
+    same_date_hours = 0
+    # 定义一个数组，存储日期
+    dates_arr = []
+    # 遍历lines中的每一行
+    for line in lines:
+        # 如果line中包含"工时不对"
+        if "工时不对" in line:
+            # 具体格式为 "工时不对!!! 日期: 2025/02/08, ums工时: 8, 企业微信工时: 11"，需要截取"日期: "后面的内容，和"ums工时: "后面的内容，和"企业微信工时: "后面的内容
+            date = line.split("日期: ")[1].split(",")[0]
+            ums_hours = int(line.split("ums工时: ")[1].split(",")[0])
+            ew_hours = int(line.split("企业微信工时: ")[1])
+            
+            if pre_date !=date:
+                pre_date = date
+                same_date_hours = ums_hours
+                continue
+            else:
+                same_date_hours += ums_hours
+                if same_date_hours == ew_hours:
+                    dates_arr.append(date)
+
+    to_remove = []
+    for i, line in enumerate(lines):
+        if "工时不对" in line:
+            date = line.split("日期: ")[1].split(",")[0]
+            if date in dates_arr:
+                to_remove.append(i)
+
+    # 倒序删除
+    for index in sorted(to_remove, reverse=True):
+        del lines[index]
     
+    # # 将lines中的内容写入dif_text中
+    dif_text.delete("1.0", tk.END)
+    for line in lines:
+        dif_text.insert(tk.END, line + "\n")
+
 # 处理按键事件，彩蛋
 def on_key_press(event):
     global key_sequence
