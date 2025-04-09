@@ -32,9 +32,13 @@ def calculate_hours(file_path, column_index, keyword, pattern):
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
 
-def calculate_total_hours(file_path):
-    # 第12列 列名为 实际工作时长
-    return calculate_hours(file_path, 12, "小时", r'(\d+)\.?\d*')
+def calculate_total_hours(file_path, overtime_hours):
+    # 第12列 列名为 实际工作时长，
+    # return calculate_hours(file_path, 12, "小时", r'(\d+)\.?\d*')
+    # 更改，改为第11列 标准工作时长，更加通用，但是没考虑请假等问题
+    temp_total_hours = calculate_hours(file_path, 11, "小时", r'(\d+)\.?\d*')
+    total_hours = int(temp_total_hours + temp_total_hours / 7)
+    return total_hours + overtime_hours
 
 def calculate_overtime_hours(file_path):
     # 第13列 列名为 "假勤申请"
@@ -62,7 +66,7 @@ def open_file():
         
         # 计算加班时长 和 总工时
         overtime_hours = calculate_overtime_hours(file_path)
-        total_hours = calculate_total_hours(file_path) # 计算总工时
+        total_hours = calculate_total_hours(file_path, overtime_hours) # 计算总工时
         if total_hours is not None:
             # 将加班时长显示在文本框中
             overtime_text.config(state=tk.NORMAL)
@@ -113,12 +117,15 @@ def process_ums_file():
     # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
     if DIFF_UMS_FILE_PATH == "" and DIFF_EW_FILE_PATH == "":
         messagebox.showerror("错误", "请先选择ums和企业微信的导出文件")
+        dif_text.config(state=tk.DISABLED)
         return None
     elif DIFF_UMS_FILE_PATH == "":
         messagebox.showerror("错误", "请先选择ums的导出文件")
+        dif_text.config(state=tk.DISABLED)
         return None
     elif DIFF_EW_FILE_PATH == "":
         messagebox.showerror("错误", "请先选择企业微信的导出文件")
+        dif_text.config(state=tk.DISABLED)
         return None
     try:
         ums_data = pd.read_html(DIFF_UMS_FILE_PATH, encoding='utf-8')[0]  # [0] 表示读取第一个表格
@@ -126,8 +133,9 @@ def process_ums_file():
 
         # 获取ums_data中列名为 工时日期 和 工时(h) 、状态的列
         ums_temp_data = ums_data[['工时日期', '工时(h)', '状态']]
-        # 挑选出状态为 “审批完成” 的行赋值给ums_temp_data
-        ums_temp_data = ums_temp_data[ums_temp_data['状态'] == '审批完成']
+        # 挑选出状态为 “审批完成”或者是“待审批” 的行赋值给ums_temp_data
+        # ums_temp_data = ums_temp_data[ums_temp_data['状态'] == '审批完成']
+        ums_temp_data = ums_temp_data[ums_temp_data['状态'].isin(['审批完成', '待审批'])]
         # 将 “工时日期” 这一列格式为"2025-03-01"转换为"2025/03/01"
         ums_temp_data['工时日期'] = ums_temp_data['工时日期'].str.replace('-', '/')
 
