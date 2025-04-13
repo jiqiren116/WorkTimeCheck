@@ -311,7 +311,7 @@ def on_key_press(event):
         # 检查是否匹配目标序列 "1024"
         if ''.join(key_sequence[-4:]) == "1024":
             # 弹出消息框
-            messagebox.showinfo("彩蛋", "作者是 robot-x")
+            messagebox.showinfo("彩蛋", "作者是 robot-x\n 源码https://github.com/jiqiren116/WorkTimeCheck")
             key_sequence = []  # 重置按键序列
 
 # 用于使窗口居中
