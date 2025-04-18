@@ -37,7 +37,8 @@ def calculate_total_hours(file_path, overtime_hours):
     # 第12列 列名为 实际工作时长，
     # return calculate_hours(file_path, 12, "小时", r'(\d+)\.?\d*')
     # 更改，改为第11列 标准工作时长，更加通用，但是没考虑请假等问题
-    temp_total_hours = calculate_hours(file_path, 11, "小时", r'(\d+)\.?\d*')
+    # temp_total_hours = calculate_hours(file_path, 11, "小时", r'(\d+)\.?\d*')
+    temp_total_hours = calculate_hours(file_path, 11, "7.5", r'(\d+)\.?\d*')
     total_hours = int(temp_total_hours + temp_total_hours / 7)
     return total_hours + overtime_hours
 
@@ -311,7 +312,7 @@ def on_key_press(event):
         # 检查是否匹配目标序列 "1024"
         if ''.join(key_sequence[-4:]) == "1024":
             # 弹出消息框
-            messagebox.showinfo("彩蛋", "作者是 robot-x\n 源码https://github.com/jiqiren116/WorkTimeCheck")
+            messagebox.showinfo("彩蛋", "作者是 robot-x\n 源码https://github.com/jiqiren116/WorkTimeCheck\n软件更新日期：2025年4月18日 17:08:27")
             key_sequence = []  # 重置按键序列
 
 # 用于使窗口居中
