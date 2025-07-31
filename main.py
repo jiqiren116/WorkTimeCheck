@@ -4,6 +4,8 @@ import os
 from tkinter import filedialog
 from tkinter import messagebox
 import re
+import attendance_fetcher  # 导入attendance_fetcher模块
+from datetime import datetime, timedelta  # 添加日期处理依赖
 
 DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
@@ -325,14 +327,58 @@ def on_key_press(event):
             messagebox.showinfo("彩蛋", "作者是 robot-x\n 源码https://github.com/jiqiren116/WorkTimeCheck\n软件更新日期：2025年4月18日 17:08:27")
             key_sequence = []  # 重置按键序列
 
+def calculate_ums_worktime_from_json(data):
+    """从UMS返回的JSON数据中计算总工时"""
+    try:
+        # 根据实际JSON结构调整键名（这里假设数据在'data'列表中）
+        records = data.get('rows', [])
+        total_hours = 0
+        for record in records:
+            # 累加工时（假设工时字段为'workHours'）
+            hours = record.get('workHours', 0)
+            total_hours += int(float(hours))  # 处理可能的浮点数
+        return total_hours
+    except Exception as e:
+        messagebox.showerror("错误", f"处理UMS数据失败: {str(e)}")
+        return None
+
 def get_ums_worktime():
-    # 从ums_account_entry和ums_password_entry中获取账号和密码
-    ums_account = ums_account_entry.get()
-    ums_password = ums_password_entry.get()
-    # 检查账号和密码是否为空
+    # 从输入框获取账号密码
+    ums_account = ums_account_entry.get().strip()
+    ums_password = ums_password_entry.get().strip()
+    
+    # 验证输入
     if not ums_account or not ums_password:
         messagebox.showwarning("提示", "请输入账号和密码")
         return None
+    
+    # 计算当前月份的起止日期（示例：当前月1号到月底）
+    today = datetime.today()
+    first_day = today.replace(day=1).strftime('%Y-%m-%d')
+    last_day = (today.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
+    last_day = last_day.strftime('%Y-%m-%d')
+    
+    # 调用attendance_fetcher获取数据
+    try:
+        ums_data = attendance_fetcher.fetch_attendance_data(
+            username=ums_account,
+            password=ums_password,
+            begin_time=first_day,
+            end_time=last_day
+        )
+
+        if ums_data:
+            # 计算总工时并显示
+            total_hours = calculate_ums_worktime_from_json(ums_data)
+            if total_hours is not None:
+                ums_worktime_text.config(state=tk.NORMAL)
+                ums_worktime_text.delete(1.0, tk.END)
+                ums_worktime_text.insert(tk.END, f" {total_hours}小时")
+                ums_worktime_text.config(state=tk.DISABLED)
+        else:
+            messagebox.showerror("错误", "获取UMS数据失败，请检查账号密码或网络")
+    except Exception as e:
+        messagebox.showerror("错误", f"调用UMS接口失败: {str(e)}")
 
 # 用于使窗口居中
 def center_window(root):
