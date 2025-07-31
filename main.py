@@ -9,18 +9,21 @@ DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
 key_sequence = []  # 用于存储按键序列，彩蛋
 
-def calculate_hours(file_path, column_index, keyword, pattern):
+def calculate_hours(file_path, column_name, pattern):
     try:
-        data = pd.read_excel(file_path, header=None, sheet_name=0)  # 读取第一个sheet
-        # 获取data中有几行
-        num_rows = data.shape[0]
-        temp_data = data.loc[4: num_rows - 1, column_index]
+        # 读取Excel文件，从第4行开始读取，第四行为列名
+        data = pd.read_excel(file_path, header=3, sheet_name=0)
+        
+        # 直接通过列名获取数据
+        temp_data = data[column_name]
 
         # 筛选包含特定关键词的数据
-        filtered_data = temp_data[temp_data.str.contains(keyword, na=False)]
+        filtered_data = temp_data[~temp_data.str.contains("--", na=False)]
 
-        # 提取小时数并转换为数值类型
+        # 提取小时数并转换为数值类型，如果数据中有不满足正则表达式的情况会返回NaN
         hours_data = filtered_data.str.extract(pattern).astype(float)
+        # 处理 NaN 值（例如删除或填充）
+        hours_data = hours_data.dropna()  # 删除包含 NaN 的行
 
         # 保留整数部分
         hours_data = hours_data[0].astype(int)
@@ -33,18 +36,17 @@ def calculate_hours(file_path, column_index, keyword, pattern):
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
 
-def calculate_total_hours(file_path, overtime_hours):
-    # 第12列 列名为 实际工作时长，
-    # return calculate_hours(file_path, 12, "小时", r'(\d+)\.?\d*')
-    # 更改，改为第11列 标准工作时长，更加通用，但是没考虑请假等问题
-    # temp_total_hours = calculate_hours(file_path, 11, "小时", r'(\d+)\.?\d*')
-    temp_total_hours = calculate_hours(file_path, 11, "7.5", r'(\d+)\.?\d*')
-    total_hours = int(temp_total_hours + temp_total_hours / 7)
-    return total_hours + overtime_hours
+def calculate_base_hours(file_path):
+    # r'(\d+)\.?\d*'表示如果原123.45，678，901.23，会提取123，678，901
+    temp_base_hours = calculate_hours(file_path, "标准工作时长(小时)", r'(\d+)\.?\d*')
+    base_hours = int(temp_base_hours + temp_base_hours / 7)
+    return base_hours
 
 def calculate_overtime_hours(file_path):
-    # 第13列 列名为 "假勤申请"
-    return calculate_hours(file_path, 13, "加班", r'加班(\d+\.\d+)小时')
+    return calculate_hours(file_path, "假勤申请", r'加班(\d+\.\d+)小时')
+
+def calculate_absence_hours(file_path):
+    return calculate_hours(file_path, "假勤申请", r'假(\d+\.\d+)小时')
 
 def select_file(filetypes, startswith, endswith):
     # 打开文件选择对话框
@@ -63,19 +65,27 @@ def select_file(filetypes, startswith, endswith):
 def open_file():
     file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
     if file_path:
+        # 如果选择文件对话框中点击取消
         if file_path == "file_path is empty":
             return None
         
         # 计算加班时长 和 总工时
         overtime_hours = calculate_overtime_hours(file_path)
-        total_hours = calculate_total_hours(file_path, overtime_hours) # 计算总工时
-        if total_hours is not None:
+        absence_hours = calculate_absence_hours(file_path)
+        total_hours = calculate_base_hours(file_path) + overtime_hours - absence_hours # 计算总工时
+        if overtime_hours is not None:
             # 将加班时长显示在文本框中
             overtime_text.config(state=tk.NORMAL)
             overtime_text.delete(1.0, tk.END)
             overtime_text.insert(tk.END, f" {overtime_hours}小时")
             overtime_text.config(state=tk.DISABLED)
-
+        if absence_hours is not None:
+            # 将请假时长显示在文本框中
+            absence_text.config(state=tk.NORMAL)
+            absence_text.delete(1.0, tk.END)
+            absence_text.insert(tk.END, f" {absence_hours}小时")
+            absence_text.config(state=tk.DISABLED)
+        if total_hours is not None:
             # 将总工时显示在文本框中
             totaltime_text.config(state=tk.NORMAL)
             totaltime_text.delete(1.0, tk.END)
@@ -315,6 +325,15 @@ def on_key_press(event):
             messagebox.showinfo("彩蛋", "作者是 robot-x\n 源码https://github.com/jiqiren116/WorkTimeCheck\n软件更新日期：2025年4月18日 17:08:27")
             key_sequence = []  # 重置按键序列
 
+def get_ums_worktime():
+    # 从ums_account_entry和ums_password_entry中获取账号和密码
+    ums_account = ums_account_entry.get()
+    ums_password = ums_password_entry.get()
+    # 检查账号和密码是否为空
+    if not ums_account or not ums_password:
+        messagebox.showwarning("提示", "请输入账号和密码")
+        return None
+
 # 用于使窗口居中
 def center_window(root):
     # 获取屏幕尺寸
@@ -332,83 +351,135 @@ def center_window(root):
     # 设置窗口位置
     root.geometry(f'+{x_cordinate - 300}+{y_cordinate - 300}')
 
-# 创建主窗口
-root = tk.Tk()
-root.title("工时统计工具")
-root.geometry("460x500")  # 设置窗口大小
-# 调用函数，使窗口居中
-center_window(root)
+def create_gui():
+    global overtime_text, totaltime_text, dif_text, absence_text  # 声明全局控件变量
+    global ums_account_entry, ums_password_entry, ums_worktime_text  # 声明全局控件变量
 
-open_ew_file_frame = tk.Frame(root)
-open_ew_file_frame.pack(pady=10)
+    # 创建主窗口
+    root = tk.Tk()
+    root.title("工时统计工具")
+    root.geometry("460x500")  # 设置窗口大小
+    center_window(root)
 
-# 创建label并添加到Frame中
-open_ew_file_label = tk.Label(open_ew_file_frame, text="选择企业微信导出的Excel文件\n 来查看 加班时间 和 总工时:")
-open_ew_file_label.pack(side=tk.LEFT)
+    # 创建主水平框架
+    main_frame = tk.Frame(root)
+    main_frame.pack(pady=10, fill=tk.X, padx=10)
 
-# 创建文件选择按钮
-open_ew_file_button = tk.Button(open_ew_file_frame, text="选择文件", command=open_file)
-open_ew_file_button.pack(side=tk.LEFT, padx=5)
+    # 左侧信息区域
+    left_frame = tk.Frame(main_frame)
+    left_frame.pack(side=tk.LEFT)
 
-### 加班时长
-overtime_frame = tk.Frame(root)
-overtime_frame.pack(pady=10)
+    # 企业微信文件选择区域
+    open_ew_file_frame = tk.Frame(left_frame)
+    open_ew_file_frame.pack(pady=10)
+    open_ew_file_label = tk.Label(open_ew_file_frame, text="选择企业微信导出的Excel文件\n 来查看 加班时间 和 总工时:")
+    open_ew_file_label.pack(side=tk.LEFT)
+    open_ew_file_button = tk.Button(open_ew_file_frame, text="选择文件", command=open_file)
+    open_ew_file_button.pack(side=tk.LEFT, padx=5)
 
-# 创建label并添加到Frame中
-overtime_label = tk.Label(overtime_frame, text="加班时长:")
-overtime_label.pack(side=tk.LEFT)
+    # 加班时长显示区域
+    overtime_frame = tk.Frame(left_frame)
+    overtime_frame.pack(pady=10)
+    overtime_label = tk.Label(overtime_frame, text="加班时长:")
+    overtime_label.pack(side=tk.LEFT)
+    overtime_text = tk.Text(overtime_frame, height=1, width=10)
+    overtime_text.pack(side=tk.LEFT, padx=5)
+    overtime_text.config(state=tk.DISABLED)
 
-overtime_text = tk.Text(overtime_frame, height=1, width=10)
-overtime_text.pack(side=tk.LEFT, padx=5)
-# 设置文本框不可以手动更改
-overtime_text.config(state=tk.DISABLED)
+    # 请假时长显示区域
+    absence_frame = tk.Frame(left_frame)
+    absence_frame.pack(pady=10)
+    absence_label = tk.Label(absence_frame, text="请假时长:")
+    absence_label.pack(side=tk.LEFT)
+    absence_text = tk.Text(absence_frame, height=1, width=10)
+    absence_text.pack(side=tk.LEFT, padx=5)
+    absence_text.config(state=tk.DISABLED)
 
-### 总工时
-totaltime_frame = tk.Frame(root)
-totaltime_frame.pack(pady=10)
-# 创建label并添加到Frame中
-totaltime_label = tk.Label(totaltime_frame, text="总工时:")
-totaltime_label.pack(side=tk.LEFT)
+    # 总工时显示区域
+    totaltime_frame = tk.Frame(left_frame)
+    totaltime_frame.pack(pady=10)
+    totaltime_label = tk.Label(totaltime_frame, text="企业微信总工时:")
+    totaltime_label.pack(side=tk.LEFT)
+    totaltime_text = tk.Text(totaltime_frame, height=1, width=10)
+    totaltime_text.pack(pady=10)
+    totaltime_text.config(state=tk.DISABLED)
 
-# 创建文本框用于显示结果
-totaltime_text = tk.Text(totaltime_frame, height=1, width=10)
-totaltime_text.pack(pady=10)
-# 设置文本框不可以手动更改
-totaltime_text.config(state=tk.DISABLED)
+    # 中间分割线
+    separator = tk.Frame(main_frame, width=2, bg="gray")
+    separator.pack(side=tk.LEFT, fill=tk.Y, padx=10)
 
-# 画一条横线来分隔
-separator = tk.Frame(root, height=2, bd=1, relief=tk.SUNKEN)
-separator.pack(fill=tk.X, padx=5, pady=5)
+    # 右侧按钮区域
+    right_frame = tk.Frame(main_frame)
+    right_frame.pack(side=tk.LEFT)
 
-# 创建一个label，用于显示提示信息
-info_label = tk.Label(root, text="如果 UMS 工时和 企业微信 工时 不一致，再点击下面的按钮")
-# 将label字体设置为红色，并加粗放大
-info_label.config(fg="red", font=("Arial", 12, "bold"))
-info_label.pack(pady=10)
+    # 右侧标签
+    right_label = tk.Label(right_frame, text="输入ums账号,密码获取UMS工时", fg="blue")
+    right_label.pack(pady=20)
 
-diff_frame = tk.Frame(root)
-diff_frame.pack(pady=10)
-open_ums_file_button = tk.Button(diff_frame, text="选择UMS导出的Excel文件", command=open_ums_file)
-open_ums_file_button.pack(side=tk.LEFT, padx=5)
+    # ums账号输入框
+    ums_account_frame = tk.Frame(right_frame)
+    ums_account_frame.pack(pady=10)
+    ums_account_label = tk.Label(ums_account_frame, text="UMS账号:")
+    ums_account_label.pack(side=tk.LEFT)
+    ums_account_entry = tk.Entry(ums_account_frame)
+    ums_account_entry.pack(side=tk.LEFT, padx=5)
+    # ums密码输入框
+    ums_password_frame = tk.Frame(right_frame)
+    ums_password_frame.pack(pady=10)
+    ums_password_label = tk.Label(ums_password_frame, text="UMS密码:") 
+    ums_password_label.pack(side=tk.LEFT)
+    ums_password_entry = tk.Entry(ums_password_frame, show="*")
+    ums_password_entry.pack(side=tk.LEFT, padx=5)
 
-open_ew_file_button2 = tk.Button(diff_frame, text="选择企业微信导出的Excel文件", command=open_ew_file)
-open_ew_file_button2.pack(side=tk.LEFT, padx=5)
+    # 获取ums工时按钮
+    get_ums_worktime_button = tk.Button(right_frame, text="获取UMS工时", command=get_ums_worktime)
+    get_ums_worktime_button.pack(pady=20)
 
-diff_frame2 = tk.Frame(root)
-diff_frame2.pack(pady=10)
-# 创建label并添加到Frame中
-diff_label = tk.Label(diff_frame2, text="选中两个文件后，点击执行对比，查看差异:")
-diff_label.pack(side=tk.LEFT)
-execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
-execute_diff_button.pack(side=tk.LEFT, padx=5)
+    # ums工时显示区域
+    ums_worktime_frame = tk.Frame(right_frame)
+    ums_worktime_frame.pack(pady=10)
+    ums_worktime_label = tk.Label(ums_worktime_frame, text="UMS工时:")
+    ums_worktime_label.pack(side=tk.LEFT)
+    ums_worktime_text = tk.Text(ums_worktime_frame, height=1, width=10)
+    ums_worktime_text.pack(side=tk.LEFT, padx=5)
+    ums_worktime_text.config(state=tk.DISABLED)
+    
 
-# 绘制一个文本框，带滚动条，用于显示结果
-dif_text = tk.Text(root, height=100, width=320)
-dif_text.pack(pady=10)
-dif_text.config(state=tk.DISABLED)
+    # 分隔线
+    separator = tk.Frame(root, height=2, bd=1, relief=tk.SUNKEN)
+    separator.pack(fill=tk.X, padx=5, pady=5)
 
-# 绑定键盘事件
-root.bind("<Key>", on_key_press)
+    # 提示信息
+    info_label = tk.Label(root, text="如果 UMS 工时和 企业微信 工时 不一致，再点击下面的按钮")
+    info_label.config(fg="red", font=("Arial", 12, "bold"))
+    info_label.pack(pady=10)
 
-# 运行主循环
-root.mainloop()
+    # 文件对比选择区域
+    diff_frame = tk.Frame(root)
+    diff_frame.pack(pady=10)
+    open_ums_file_button = tk.Button(diff_frame, text="选择UMS导出的Excel文件", command=open_ums_file)
+    open_ums_file_button.pack(side=tk.LEFT, padx=5)
+    open_ew_file_button2 = tk.Button(diff_frame, text="选择企业微信导出的Excel文件", command=open_ew_file)
+    open_ew_file_button2.pack(side=tk.LEFT, padx=5)
+
+    # 对比执行区域
+    diff_frame2 = tk.Frame(root)
+    diff_frame2.pack(pady=10)
+    diff_label = tk.Label(diff_frame2, text="选中两个文件后，点击执行对比，查看差异:")
+    diff_label.pack(side=tk.LEFT)
+    execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
+    execute_diff_button.pack(side=tk.LEFT, padx=5)
+
+    # 差异结果显示区域
+    dif_text = tk.Text(root, height=100, width=320)
+    dif_text.pack(pady=10)
+    dif_text.config(state=tk.DISABLED)
+
+    # 绑定键盘事件
+    root.bind("<Key>", on_key_press)
+    
+    return root
+
+if __name__ == "__main__":
+    root = create_gui()
+    root.mainloop()
