@@ -13,11 +13,15 @@ CONFIG_FILE = "config.json"
 DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
 key_sequence = []  # 用于存储按键序列，彩蛋
+EW_EXCEL_DATA = None # 用于存储企业微信导出的excel数据
+UMS_DATA = {} # 用于存储ums数据
 
 def calculate_hours(file_path, column_name, pattern):
+    global EW_EXCEL_DATA
     try:
         # 读取Excel文件，从第4行开始读取，第四行为列名
         data = pd.read_excel(file_path, header=3, sheet_name=0)
+        EW_EXCEL_DATA = data
         
         # 直接通过列名获取数据
         temp_data = data[column_name]
@@ -99,18 +103,18 @@ def open_file():
     else:
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
-def open_ums_file():
-    global DIFF_UMS_FILE_PATH  # 声明为全局变量
+# def open_ums_file():
+#     global DIFF_UMS_FILE_PATH  # 声明为全局变量
 
-    file_path = select_file([("Excel files", "*.xlsx *.xls")], "export", ".xls")
-    if file_path:
-        if file_path == "file_path is empty":
-            return None
+#     file_path = select_file([("Excel files", "*.xlsx *.xls")], "export", ".xls")
+#     if file_path:
+#         if file_path == "file_path is empty":
+#             return None
         
-        dif_text.delete(1.0, tk.END)
-        DIFF_UMS_FILE_PATH = file_path
-    else:
-        messagebox.showerror("文件选择错误", "请选择从 UMS 导出的文件\n 格式为 “export.xls")
+#         dif_text.delete(1.0, tk.END)
+#         DIFF_UMS_FILE_PATH = file_path
+#     else:
+#         messagebox.showerror("文件选择错误", "请选择从 UMS 导出的文件\n 格式为 “export.xls")
 
 
 def open_ew_file():
@@ -126,14 +130,13 @@ def open_ew_file():
     else:
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
-def process_ums_file():
+def work_hours_compare():
     dif_text.config(state=tk.NORMAL)
     # 清空dif_text中的内容
     dif_text.delete(1.0, tk.END)
    
     try:
-        # 首先判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
-        if not validate_file_paths():
+        if not validate_file_paths_and_account():
             return None
 
         ums_temp_data, ew_filtered_data = read_and_process_data() # 读取数据
@@ -150,21 +153,20 @@ def process_ums_file():
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
         return None
 
-# 用于判断DIFF_UMS_FILE_PATH和DIFF_EW_FILE_PATH是否为空
-def validate_file_paths():
-    if DIFF_UMS_FILE_PATH == "" and DIFF_EW_FILE_PATH == "":
-        messagebox.showerror("错误", "请先选择ums和企业微信的导出文件")
-        dif_text.config(state=tk.DISABLED)
+# 判断文件路径和账号是否为空
+def validate_file_paths_and_account():
+    global EW_EXCEL_DATA, UMS_DATA
+    if EW_EXCEL_DATA is None and UMS_DATA is None:
+        messagebox.showerror("错误", "请先选择企业微信的导出文件和输入账号，密码获取UMS工时")
         return False
-    elif DIFF_UMS_FILE_PATH == "":
-        messagebox.showerror("错误", "请先选择ums的导出文件")
-        dif_text.config(state=tk.DISABLED)
-        return False
-    elif DIFF_EW_FILE_PATH == "":
+    elif EW_EXCEL_DATA is None:
         messagebox.showerror("错误", "请先选择企业微信的导出文件")
-        dif_text.config(state=tk.DISABLED)
+        return False
+    elif UMS_DATA is None:
+        messagebox.showerror("错误", "请先输入账号，密码获取UMS工时")
         return False
     return True
+        
 
 def read_and_process_data():
     ums_data = pd.read_html(DIFF_UMS_FILE_PATH, encoding='utf-8')[0]  # [0] 表示读取第一个表格
@@ -370,6 +372,7 @@ def save_config(account, password):
         messagebox.showerror("错误", f"保存配置失败: {e}")
 
 def get_ums_worktime():
+    global UMS_DATA
     # 从输入框获取账号密码
     ums_account = ums_account_entry.get().strip()
     ums_password = ums_password_entry.get().strip()
@@ -391,7 +394,7 @@ def get_ums_worktime():
     
     # 调用attendance_fetcher获取数据
     try:
-        ums_data = attendance_fetcher.fetch_attendance_data(
+        UMS_DATA = ums_data = attendance_fetcher.fetch_attendance_data(
             username=ums_account,
             password=ums_password,
             begin_time=first_day,
@@ -445,7 +448,7 @@ def create_gui():
     # 创建主窗口
     root = tk.Tk()
     root.title("工时统计工具")
-    root.geometry("460x500")  # 设置窗口大小
+    root.geometry("460x700")  # 设置窗口大小
     center_window(root)
 
     # 创建主水平框架
@@ -554,18 +557,18 @@ def create_gui():
     # 文件对比选择区域
     diff_frame = tk.Frame(root)
     diff_frame.pack(pady=10)
-    open_ums_file_button = tk.Button(diff_frame, text="选择UMS导出的Excel文件", command=open_ums_file)
-    open_ums_file_button.pack(side=tk.LEFT, padx=5)
-    open_ew_file_button2 = tk.Button(diff_frame, text="选择企业微信导出的Excel文件", command=open_ew_file)
+    # open_ums_file_button = tk.Button(diff_frame, text="选择UMS导出的Excel文件", command=open_ums_file)
+    # open_ums_file_button.pack(side=tk.LEFT, padx=5)
+    open_ew_file_button2 = tk.Button(diff_frame, text="工时比对", command=work_hours_compare)
     open_ew_file_button2.pack(side=tk.LEFT, padx=5)
 
     # 对比执行区域
-    diff_frame2 = tk.Frame(root)
-    diff_frame2.pack(pady=10)
-    diff_label = tk.Label(diff_frame2, text="选中两个文件后，点击执行对比，查看差异:")
-    diff_label.pack(side=tk.LEFT)
-    execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
-    execute_diff_button.pack(side=tk.LEFT, padx=5)
+    # diff_frame2 = tk.Frame(root)
+    # diff_frame2.pack(pady=10)
+    # diff_label = tk.Label(diff_frame2, text="选中两个文件后，点击执行对比，查看差异:")
+    # diff_label.pack(side=tk.LEFT)
+    # execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
+    # execute_diff_button.pack(side=tk.LEFT, padx=5)
 
     # 差异结果显示区域
     dif_text = tk.Text(root, height=100, width=320)
