@@ -13,15 +13,74 @@ CONFIG_FILE = "config.json"
 DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
 key_sequence = []  # 用于存储按键序列，彩蛋
-EW_EXCEL_DATA = None # 用于存储企业微信导出的excel数据
 UMS_DATA = {} # 用于存储ums数据
+EW_JSON_DATA = {} # 用于存储企业微信导出的json数据
+
+# 用于将企业微信导出的excel数据转换为json格式,方便同ums导出的json数据比较
+def ew_excel_to_json(excel_data, column_name, pattern=None):
+    global EW_JSON_DATA
+    if column_name == "标准工作时长(小时)":
+        EW_JSON_DATA = {}
+        for index, row in excel_data.iterrows():
+            reportTime = row.iloc[0]
+
+            hours = row["标准工作时长(小时)"]
+            if hours == "--":
+                EW_JSON_DATA[reportTime] = 0
+                continue
+            
+            # hours的格式为“7.5”，转换为8
+            hours = float(hours)
+            hours = round(hours)
+            EW_JSON_DATA[reportTime] = hours
+    
+    if column_name == "假勤申请":
+        for index, row in excel_data.iterrows():
+            reportTime = row.iloc[0]
+            hours = row["假勤申请"]
+            if hours == "--":
+                continue
+            elif "加班" in pattern:
+                # 用pattern提取加班小时数
+                overtime_hours = re.search(pattern, hours)
+                if overtime_hours:
+                    # 提取出的overtime_hours格式为“加班3.0小时”，我只想要其中的整数部分
+                    overtime_hours = overtime_hours.group(1)
+                    # 提取出的overtime_hours格式为“3.0”，我只想要其中的整数部分
+                    overtime_hours = overtime_hours.split(".")[0]
+                    if overtime_hours:
+                        overtime_hours = int(float(overtime_hours))
+                        EW_JSON_DATA[reportTime] = EW_JSON_DATA[reportTime] + overtime_hours
+                continue
+            elif "假" in pattern:
+                # 用pattern提取假勤小时数
+                absence_hours = re.search(pattern, hours)
+                if absence_hours:
+                    # 提取出的absence_hours格式为“假3.0小时”，我只想要其中的整数部分
+                    absence_hours = absence_hours.group(1)
+                    # 提取出的absence_hours格式为“3.0”，我只想要其中的整数部分
+                    absence_hours = absence_hours.split(".")[0]
+                    if absence_hours:
+                        absence_hours = int(float(absence_hours))
+                        EW_JSON_DATA[reportTime] = EW_JSON_DATA[reportTime] - absence_hours
+                continue
+    
+    # 时间转换
+    if column_name == "假勤申请" and "假" in pattern:
+        # 使用字典推导式创建新字典
+        EW_JSON_DATA = {
+            key.split(" ")[0].replace("/", "-"): value 
+            for key, value in EW_JSON_DATA.items()
+        }
 
 def calculate_hours(file_path, column_name, pattern):
-    global EW_EXCEL_DATA
     try:
         # 读取Excel文件，从第4行开始读取，第四行为列名
         data = pd.read_excel(file_path, header=3, sheet_name=0)
-        EW_EXCEL_DATA = data
+        if column_name == "标准工作时长(小时)":
+            ew_excel_to_json(data, column_name)
+        elif column_name == "假勤申请":
+            ew_excel_to_json(data, column_name, pattern)
         
         # 直接通过列名获取数据
         temp_data = data[column_name]
@@ -43,7 +102,7 @@ def calculate_hours(file_path, column_name, pattern):
         return result_hours
     except Exception as e:
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
-        return None
+        return 0
 
 def calculate_base_hours(file_path):
     # r'(\d+)\.?\d*'表示如果原123.45，678，901.23，会提取123，678，901
@@ -79,9 +138,10 @@ def open_file():
             return None
         
         # 计算加班时长 和 总工时
+        base_hours = calculate_base_hours(file_path)
         overtime_hours = calculate_overtime_hours(file_path)
         absence_hours = calculate_absence_hours(file_path)
-        total_hours = calculate_base_hours(file_path) + overtime_hours - absence_hours # 计算总工时
+        total_hours = base_hours + overtime_hours - absence_hours # 计算总工时
         if overtime_hours is not None:
             # 将加班时长显示在文本框中
             overtime_text.config(state=tk.NORMAL)
@@ -102,20 +162,6 @@ def open_file():
             totaltime_text.config(state=tk.DISABLED)
     else:
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
-
-# def open_ums_file():
-#     global DIFF_UMS_FILE_PATH  # 声明为全局变量
-
-#     file_path = select_file([("Excel files", "*.xlsx *.xls")], "export", ".xls")
-#     if file_path:
-#         if file_path == "file_path is empty":
-#             return None
-        
-#         dif_text.delete(1.0, tk.END)
-#         DIFF_UMS_FILE_PATH = file_path
-#     else:
-#         messagebox.showerror("文件选择错误", "请选择从 UMS 导出的文件\n 格式为 “export.xls")
-
 
 def open_ew_file():
     global DIFF_EW_FILE_PATH  # 声明为全局变量
@@ -139,11 +185,11 @@ def work_hours_compare():
         if not validate_file_paths_and_account():
             return None
 
-        ums_temp_data, ew_filtered_data = read_and_process_data() # 读取数据
+        # ums_temp_data, ew_filtered_data = read_and_process_data() # 读取数据
 
-        compare_hours(ums_temp_data, ew_filtered_data) # 比较工时
+        compare_hours() # 比较工时
 
-        handle_same_date_hours() # 处理dif_text中ums相同日期的工时
+        # handle_same_date_hours() # 处理dif_text中ums相同日期的工时
 
         dif_text.tag_add("red", "1.0", "end")
         dif_text.tag_config("red", foreground="red")
@@ -155,166 +201,49 @@ def work_hours_compare():
 
 # 判断文件路径和账号是否为空
 def validate_file_paths_and_account():
-    global EW_EXCEL_DATA, UMS_DATA
-    if EW_EXCEL_DATA is None and UMS_DATA is None:
+    global EW_JSON_DATA, UMS_DATA
+    if EW_JSON_DATA == {} and UMS_DATA == {}:
         messagebox.showerror("错误", "请先选择企业微信的导出文件和输入账号，密码获取UMS工时")
         return False
-    elif EW_EXCEL_DATA is None:
+    elif EW_JSON_DATA == {}:
         messagebox.showerror("错误", "请先选择企业微信的导出文件")
         return False
-    elif UMS_DATA is None:
+    elif UMS_DATA == {}:
         messagebox.showerror("错误", "请先输入账号，密码获取UMS工时")
         return False
     return True
         
 
-def read_and_process_data():
-    ums_data = pd.read_html(DIFF_UMS_FILE_PATH, encoding='utf-8')[0]  # [0] 表示读取第一个表格
-    ew_data = pd.read_excel(DIFF_EW_FILE_PATH, header=None, sheet_name=0)  # 读取第一个sheet
+def compare_hours():
+    global UMS_DATA, EW_JSON_DATA
+    # 其中EW_JSON_DATA的键为日期，格式为"2025-07-30",值为整数，而UMS_DATA键为日期，格式为"2025-07-30 00:00:00",值为小数，
+    # 遍历EW_JSON_DATA,看EW_JSON_DATA的键是否在UMS_DATA中出现过，
+    # 如果出现过，就将EW_JSON_DATA的值和UMS_DATA的值进行比较，相同就pass，不同就打印
+    # 遍历EW_JSON_DATA,比较两个数据源的工时
 
-    # 获取ums_data中列名为 工时日期 和 工时(h) 、状态的列
-    ums_temp_data = ums_data[['工时日期', '工时(h)', '状态']]
-    # 挑选出状态为 “审批完成”或者是“待审批” 的行赋值给ums_temp_data
-    # ums_temp_data = ums_temp_data[ums_temp_data['状态'] == '审批完成']
-    ums_temp_data = ums_temp_data[ums_temp_data['状态'].isin(['审批完成', '待审批'])]
-    # 将 “工时日期” 这一列格式为"2025-03-01"转换为"2025/03/01"
-    ums_temp_data['工时日期'] = ums_temp_data['工时日期'].str.replace('-', '/')
+    # 将UMS_DATA转换为字典格式便于比较
+    ums_dict = {}
+    for record in UMS_DATA:
+        # 从 "2025-07-31 00:00:00" 提取日期部分 "2025-07-31"
+        date = record['reportTime'].split(' ')[0]
+        hours = int(float(record['workHours']))
+        ums_dict[date] = hours
 
-    num_rows = ew_data.shape[0]
-    ew_temp_data = ew_data.loc[4: num_rows - 1, [0, 11,12,13]]
-
-    # 筛选出包含“小时”的行
-    ew_filtered_data = ew_temp_data[ew_temp_data[12].astype(str).str.contains("小时")]
-
-    return ums_temp_data, ew_filtered_data
-
-def compare_hours(ums_temp_data, ew_filtered_data):
-    # 便利ums_temp_data中的每一行
-    for index, ums_row in ums_temp_data.iterrows(): # 这个index是从0开始的，符合常规逻辑
-        ums_date = ums_row['工时日期']
-        ums_hours = ums_row['工时(h)']
-        # 确保ums_hours是整数类型
-        if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
-            ums_hours = int(ums_hours)
-
-        ew_count = 0 # 计数器，用于记录遍历了ew_filtered_data中的多少行，因为ew_filtered_data中index是从4开始的，不符合常规逻辑
-        # 遍历ew_filtered_data中的每一行
-        for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
-            ew_count += 1
-            ew_date = ew_row[0]
-
-            temp_hour = 0
-            # 如果ew_row[11]中包含“小时”，说明这最起码是8h
-            if "小时" in ew_row[11]:
-                temp_hour = 8
-            # 如果ew_row[13]中包含“加班”，说明这是加班或者病假等
-            if "小时" in ew_row[13]:
-                # 按照正则表达式提取出数字 "'加班(\d+\.\d+)小时'"
-                if "加班" in ew_row[13]:
-                    pattern = r'加班(\d+\.\d+)小时'
-                    match = re.search(pattern, ew_row[13])
-                    if match:
-                        temp_overtime = float(match.group(1))
-                        temp_hour = int(temp_hour + temp_overtime)
-                if "病假" in ew_row[13]:
-                    pattern = r'病假(\d+\.\d+)小时'
-                    match = re.search(pattern, ew_row[13])
-                    if match:
-                        temp_sicktime = float(match.group(1))
-                        temp_hour = int(temp_hour - temp_sicktime)
-                        # 如果temp_hour小于0,弹窗报错
-                        if temp_hour < 0:
-                            messagebox.showerror("错误", f"时间计算错误，{ums_date} 的 企业微信 工时为 {temp_hour} 小时，小于0")
-                            dif_text.config(state=tk.DISABLED)
-                            return None
-            ew_hours = int(temp_hour)
-
-            # 如果ew_date中包含date，并且ew_hours不等于hours
-            if ums_date in ew_date and ums_hours != ew_hours:
-                # 将结果写入dif_text中
-                dif_text.insert(tk.END, f"工时不对!!! 日期: {ums_date}, ums工时: {ums_hours}, 企业微信工时: {ew_hours}\n")
-                break
-            if ums_date in ew_date and ums_hours== ew_hours:
-                break
-
-            # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
-            if ew_count == ew_filtered_data.shape[0]:
-                dif_text.insert(tk.END, f"企业微信 缺少 {ums_date} 的记录!!!\n")
-
-    # 遍历ew_filtered_data中的每一行
-    for index, ew_row in ew_filtered_data.iterrows(): # 这个index是从4开始的，跟ew excel表中的行号一致，不符合常规逻辑
-        ew_date = ew_row[0]
-        
-        ums_index = 0 # 计数器，用于记录遍历了ums_temp_data中的多少行
-        # 遍历ums_temp_data中的每一行
-        for index, ums_row in ums_temp_data.iterrows(): # 这个ums_index是从0开始的，符合常规逻辑
-            ums_index += 1
-            ums_date = ums_row['工时日期']
-            ums_hours = ums_row['工时(h)']
-            # 确保ums_hours是整数类型
-            if isinstance(ums_hours, float): # 如果ums_hours是float类型，那么需要转换为int类型
-                ums_hours = int(ums_hours)
-
-            # 如果ew_date中包含date
-            if ums_date in ew_date:
-                break
-            
-            # 如果遍历完，date一直没有在ew_date中出现，将结果写入dif_text中
-            if ums_index == ums_temp_data.shape[0]:
-                dif_text.insert(tk.END, f"ums 缺少 {ew_date} 的记录!!!\n")
-                break
-
-# 处理dif_text中ums相同日期的工时
-def handle_same_date_hours():
-    ###### 处理dif_text中ums相同日期的工时 #####
-    # 确定dif_text中是否有内容
-    if dif_text.get("1.0", tk.END) == "\n":
-        messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
-        return None
-    # 提取dif_text中的内容，用换行符分割
-    content = dif_text.get("1.0", tk.END)
-    lines = content.split("\n")
-    # 确保lines不为空
-    if not lines:
-        messagebox.showinfo("提示", "ums和企业微信的导出文件一致，没有差异")
-        return None
-    pre_date = ""
-    same_date_hours = 0
-    # 定义一个数组，存储日期
-    dates_arr = []
-    # 遍历lines中的每一行
-    for line in lines:
-        # 如果line中包含"工时不对"
-        if "工时不对" in line:
-            # 具体格式为 "工时不对!!! 日期: 2025/02/08, ums工时: 8, 企业微信工时: 11"，需要截取"日期: "后面的内容，和"ums工时: "后面的内容，和"企业微信工时: "后面的内容
-            date = line.split("日期: ")[1].split(",")[0]
-            ums_hours = int(line.split("ums工时: ")[1].split(",")[0])
-            ew_hours = int(line.split("企业微信工时: ")[1])
-            
-            if pre_date !=date:
-                pre_date = date
-                same_date_hours = ums_hours
-                continue
-            else:
-                same_date_hours += ums_hours
-                if same_date_hours == ew_hours:
-                    dates_arr.append(date)
-
-    to_remove = []
-    for i, line in enumerate(lines):
-        if "工时不对" in line:
-            date = line.split("日期: ")[1].split(",")[0]
-            if date in dates_arr:
-                to_remove.append(i)
-
-    # 倒序删除
-    for index in sorted(to_remove, reverse=True):
-        del lines[index]
-    
-    # # 将lines中的内容写入dif_text中
-    dif_text.delete("1.0", tk.END)
-    for line in lines:
-        dif_text.insert(tk.END, line + "\n")
+    # print(UMS_DATA)
+    # 遍历EW_JSON_DATA,比较两个数据源的工时
+    flag = True
+    for ew_date in EW_JSON_DATA:
+        ew_hours = EW_JSON_DATA[ew_date]
+        if ew_date in ums_dict:
+            ums_hours = ums_dict[ew_date]
+            if ew_hours != ums_hours:
+                flag = False
+                dif_text.insert(tk.END, f"工时不对!!! 日期: {ew_date}, 企业微信工时: {ew_hours}, ums工时: {ums_hours}\n")
+        elif ew_hours != 0:
+            flag = False
+            dif_text.insert(tk.END, f"UMS中无此日期数据!!! 日期: {ew_date}, 企业微信工时: {ew_hours}, ums工时: 0\n")
+    if flag:
+        messagebox.showinfo("OK", "工时一致，没有差异")
 
 # 处理按键事件，彩蛋
 def on_key_press(event):
@@ -335,8 +264,15 @@ def on_key_press(event):
 def calculate_ums_worktime_from_json(data):
     """从UMS返回的JSON数据中计算总工时"""
     try:
-        # 根据实际JSON结构调整键名（这里假设数据在'data'列表中）
-        records = data.get('rows', [])
+        # 如果data是字典且包含rows键
+        if isinstance(data, dict) and 'rows' in data:
+            records = data['rows']
+        # 如果data本身就是列表
+        elif isinstance(data, list):
+            records = data
+        else:
+            records = []
+            
         total_hours = 0
         for record in records:
             # 累加工时（假设工时字段为'workHours'）
@@ -394,14 +330,17 @@ def get_ums_worktime():
     
     # 调用attendance_fetcher获取数据
     try:
-        UMS_DATA = ums_data = attendance_fetcher.fetch_attendance_data(
+        ums_data = attendance_fetcher.fetch_attendance_data(
             username=ums_account,
             password=ums_password,
-            begin_time=first_day,
-            end_time=last_day
+            begin_time='2025-07-01',
+            end_time='2025-07-31'
         )
 
-        if ums_data:
+        # 只提取rows部分的数据
+        if ums_data and 'rows' in ums_data:
+            UMS_DATA = ums_data['rows']  # 只保存rows部分
+
             # 计算总工时并显示
             total_hours = calculate_ums_worktime_from_json(ums_data)
             if total_hours is not None:
