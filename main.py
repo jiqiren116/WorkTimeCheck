@@ -6,7 +6,10 @@ from tkinter import messagebox
 import re
 import attendance_fetcher  # 导入attendance_fetcher模块
 from datetime import datetime, timedelta  # 添加日期处理依赖
+import json
 
+# 添加配置文件路径常量
+CONFIG_FILE = "config.json"
 DIFF_UMS_FILE_PATH = ""
 DIFF_EW_FILE_PATH = ""
 key_sequence = []  # 用于存储按键序列，彩蛋
@@ -342,6 +345,30 @@ def calculate_ums_worktime_from_json(data):
         messagebox.showerror("错误", f"处理UMS数据失败: {str(e)}")
         return None
 
+# 添加配置文件读写函数
+def load_config():
+    """加载保存的账号密码配置"""
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                ums_account_entry.insert(0, config.get('account', ''))
+                ums_password_entry.insert(0, config.get('password', ''))
+                remember_var.set(True)
+        except Exception as e:
+            print(f"加载配置失败: {e}")
+
+def save_config(account, password):
+    """保存账号密码到配置文件"""
+    try:
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump({
+                'account': account,
+                'password': password
+            }, f, ensure_ascii=False, indent=4)
+    except Exception as e:
+        messagebox.showerror("错误", f"保存配置失败: {e}")
+
 def get_ums_worktime():
     # 从输入框获取账号密码
     ums_account = ums_account_entry.get().strip()
@@ -351,6 +378,10 @@ def get_ums_worktime():
     if not ums_account or not ums_password:
         messagebox.showwarning("提示", "请输入账号和密码")
         return None
+    
+    # 如果勾选了记住账号密码，则保存
+    if remember_var.get():
+        save_config(ums_account, ums_password)
     
     # 计算当前月份的起止日期（示例：当前月1号到月底）
     today = datetime.today()
@@ -399,8 +430,18 @@ def center_window(root):
 
 def create_gui():
     global overtime_text, totaltime_text, dif_text, absence_text  # 声明全局控件变量
-    global ums_account_entry, ums_password_entry, ums_worktime_text  # 声明全局控件变量
+    global ums_account_entry, ums_password_entry, ums_worktime_text, remember_var  
 
+    def on_account_change(event):
+        """当账号输入框内容发生变化时调用"""
+        if remember_var.get():
+            remember_var.set(False)
+
+    def on_password_change(event):
+        """当密码输入框内容发生变化时调用"""
+        if remember_var.get():
+            remember_var.set(False)
+    
     # 创建主窗口
     root = tk.Tk()
     root.title("工时统计工具")
@@ -469,14 +510,24 @@ def create_gui():
     ums_account_label.pack(side=tk.LEFT)
     ums_account_entry = tk.Entry(ums_account_frame)
     ums_account_entry.pack(side=tk.LEFT, padx=5)
+    ums_account_entry.bind('<KeyRelease>', on_account_change)
     # ums密码输入框
     ums_password_frame = tk.Frame(right_frame)
     ums_password_frame.pack(pady=10)
     ums_password_label = tk.Label(ums_password_frame, text="UMS密码:") 
     ums_password_label.pack(side=tk.LEFT)
-    ums_password_entry = tk.Entry(ums_password_frame, show="*")
+    ums_password_entry = tk.Entry(ums_password_frame)
     ums_password_entry.pack(side=tk.LEFT, padx=5)
+    ums_password_entry.bind('<KeyRelease>', on_password_change)
+    
+    # 添加记住账号密码选项
+    remember_var = tk.BooleanVar()
+    remember_check = tk.Checkbutton(right_frame, text="记住账号密码", variable=remember_var)
+    remember_check.pack(pady=5)
 
+    # 加载保存的配置
+    load_config()
+    
     # 获取ums工时按钮
     get_ums_worktime_button = tk.Button(right_frame, text="获取UMS工时", command=get_ums_worktime)
     get_ums_worktime_button.pack(pady=20)

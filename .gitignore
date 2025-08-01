@@ -1,3 +1,6 @@
 # 包含“日报数据”的文件
 日报数据_*.json
+日报原始数据*.txt
 *.xlsx
+__pycache__
+config.json
