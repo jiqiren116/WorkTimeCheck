@@ -23,3 +23,8 @@
 ## 使用清华镜像安装依赖
 
 `pip install requests --index-url https://pypi.tuna.tsinghua.edu.cn/simple`
+
+## 2. 打包成exe文件
+pyinstaller --onefile --noconsole main.py
+--onefile 参数会将所有内容打包成一个单独的 .exe 文件
+--noconsole：隐藏控制台窗口，适用于图形界面应用程序。

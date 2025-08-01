@@ -146,11 +146,7 @@ def work_hours_compare():
         if not validate_file_paths_and_account():
             return None
 
-        # ums_temp_data, ew_filtered_data = read_and_process_data() # 读取数据
-
         compare_hours() # 比较工时
-
-        # handle_same_date_hours() # 处理dif_text中ums相同日期的工时
 
         dif_text.tag_add("red", "1.0", "end")
         dif_text.tag_config("red", foreground="red")
@@ -177,10 +173,6 @@ def validate_file_paths_and_account():
 
 def compare_hours():
     global UMS_DATA, EW_JSON_DATA
-    # 其中EW_JSON_DATA的键为日期，格式为"2025-07-30",值为整数，而UMS_DATA键为日期，格式为"2025-07-30 00:00:00",值为小数，
-    # 遍历EW_JSON_DATA,看EW_JSON_DATA的键是否在UMS_DATA中出现过，
-    # 如果出现过，就将EW_JSON_DATA的值和UMS_DATA的值进行比较，相同就pass，不同就打印
-    # 遍历EW_JSON_DATA,比较两个数据源的工时
 
     # 将UMS_DATA转换为字典格式便于比较
     ums_dict = {}
@@ -190,7 +182,6 @@ def compare_hours():
         hours = int(float(record['workHours']))
         ums_dict[date] = hours
 
-    # print(UMS_DATA)
     # 遍历EW_JSON_DATA,比较两个数据源的工时
     flag = True
     for ew_date in EW_JSON_DATA:
@@ -222,17 +213,10 @@ def on_key_press(event):
             messagebox.showinfo("彩蛋", "作者是 robot-x\n 源码https://github.com/jiqiren116/WorkTimeCheck\n软件更新日期：2025年4月18日 17:08:27")
             key_sequence = []  # 重置按键序列
 
-def calculate_ums_worktime_from_json(data):
+def calculate_ums_total_worktime(data):
     """从UMS返回的JSON数据中计算总工时"""
     try:
-        # 如果data是字典且包含rows键
-        if isinstance(data, dict) and 'rows' in data:
-            records = data['rows']
-        # 如果data本身就是列表
-        elif isinstance(data, list):
-            records = data
-        else:
-            records = []
+        records = data
             
         total_hours = 0
         for record in records:
@@ -270,6 +254,11 @@ def save_config(account, password):
 
 def get_ums_worktime():
     global UMS_DATA
+
+    if QUERY_START_TIME == "" and QUERY_END_TIME == "":
+        messagebox.showwarning("提示", "请首先选择企业微信导出的excel文件 \n 因为需要根据企业微信导出的文件时间计算UMS工时")
+        return None
+    
     # 从输入框获取账号密码
     ums_account = ums_account_entry.get().strip()
     ums_password = ums_password_entry.get().strip()
@@ -297,7 +286,7 @@ def get_ums_worktime():
             UMS_DATA = ums_data['rows']  # 只保存rows部分
 
             # 计算总工时并显示
-            total_hours = calculate_ums_worktime_from_json(ums_data)
+            total_hours = calculate_ums_total_worktime(UMS_DATA)
             if total_hours is not None:
                 ums_worktime_text.config(state=tk.NORMAL)
                 ums_worktime_text.delete(1.0, tk.END)
