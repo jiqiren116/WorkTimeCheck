@@ -9,111 +9,65 @@ import json
 
 # 添加配置文件路径常量
 CONFIG_FILE = "config.json"
-DIFF_UMS_FILE_PATH = ""
-DIFF_EW_FILE_PATH = ""
 key_sequence = []  # 用于存储按键序列，彩蛋
 UMS_DATA = {} # 用于存储ums数据
 EW_JSON_DATA = {} # 用于存储企业微信导出的json数据
 QUERY_START_TIME = ""
 QUERY_END_TIME = ""
+OVERTIME_REGEX = r'加班(\d+\.\d+)小时'
+ABSENCE_REGEX = r'假(\d+\.\d+)小时'
+BASE_HOURS = 0
+OVERTIME_HOURS = 0
+ABSENCE_HOURS = 0
 
-# 用于将企业微信导出的excel数据转换为json格式,方便同ums导出的json数据比较
-def ew_excel_to_json(excel_data, column_name, pattern=None):
-    global EW_JSON_DATA
-    if column_name == "标准工作时长(小时)":
-        EW_JSON_DATA = {}
-        for index, row in excel_data.iterrows():
-            reportTime = row.iloc[0]
-
-            hours = row["标准工作时长(小时)"]
-            if hours == "--":
-                EW_JSON_DATA[reportTime] = 0
-                continue
-            
-            # hours的格式为“7.5”，转换为8
-            hours = float(hours)
-            hours = round(hours)
-            EW_JSON_DATA[reportTime] = hours
-    
-    if column_name == "假勤申请":
-        for index, row in excel_data.iterrows():
-            reportTime = row.iloc[0]
-            hours = row["假勤申请"]
-            if hours == "--":
-                continue
-            elif "加班" in pattern:
-                # 用pattern提取加班小时数
-                overtime_hours = re.search(pattern, hours)
-                if overtime_hours:
-                    # 提取出的overtime_hours格式为“加班3.0小时”，我只想要其中的整数部分
-                    overtime_hours = overtime_hours.group(1)
-                    # 提取出的overtime_hours格式为“3.0”，我只想要其中的整数部分
-                    overtime_hours = overtime_hours.split(".")[0]
-                    if overtime_hours:
-                        overtime_hours = int(float(overtime_hours))
-                        EW_JSON_DATA[reportTime] = EW_JSON_DATA[reportTime] + overtime_hours
-                continue
-            elif "假" in pattern:
-                # 用pattern提取假勤小时数
-                absence_hours = re.search(pattern, hours)
-                if absence_hours:
-                    # 提取出的absence_hours格式为“假3.0小时”，我只想要其中的整数部分
-                    absence_hours = absence_hours.group(1)
-                    # 提取出的absence_hours格式为“3.0”，我只想要其中的整数部分
-                    absence_hours = absence_hours.split(".")[0]
-                    if absence_hours:
-                        absence_hours = int(float(absence_hours))
-                        EW_JSON_DATA[reportTime] = EW_JSON_DATA[reportTime] - absence_hours
-                continue
-    
-    # 时间转换
-    if column_name == "假勤申请" and "假" in pattern:
-        # 使用字典推导式创建新字典
-        EW_JSON_DATA = {
-            key.split(" ")[0].replace("/", "-"): value 
-            for key, value in EW_JSON_DATA.items()
-        }
-
-def calculate_hours(file_path, column_name, pattern):
+def calculate_hours(file_path):
+    global EW_JSON_DATA, BASE_HOURS, OVERTIME_HOURS, ABSENCE_HOURS
     try:
         # 读取Excel文件，从第4行开始读取，第四行为列名
-        data = pd.read_excel(file_path, header=3, sheet_name=0)
-        if column_name == "标准工作时长(小时)":
-            ew_excel_to_json(data, column_name)
-        elif column_name == "假勤申请":
-            ew_excel_to_json(data, column_name, pattern)
-        
-        # 直接通过列名获取数据
-        temp_data = data[column_name]
+        excel_data = pd.read_excel(file_path, header=3, sheet_name=0)
 
-        # 筛选包含特定关键词的数据
-        filtered_data = temp_data[~temp_data.str.contains("--", na=False)]
+        # 初始化EW_JSON_DATA
+        EW_JSON_DATA = {}
+        for index, row in excel_data.iterrows():
+            reportTime = row.iloc[0] # 日报日期
+            reportTime = reportTime.split(" ")[0].replace("/", "-")
+            EW_JSON_DATA[reportTime] = 0
 
-        # 提取小时数并转换为数值类型，如果数据中有不满足正则表达式的情况会返回NaN
-        hours_data = filtered_data.str.extract(pattern).astype(float)
-        # 处理 NaN 值（例如删除或填充）
-        hours_data = hours_data.dropna()  # 删除包含 NaN 的行
-
-        # 保留整数部分
-        hours_data = hours_data[0].round().astype(int)
-
-        # 求和
-        result_hours = hours_data.sum()
-
-        return result_hours
+            base_hour = row["标准工作时长(小时)"]
+            if base_hour != "--":
+                EW_JSON_DATA[reportTime] = 8
+                BASE_HOURS += 8
+            overtime_and_absence_hour = row["假勤申请"]
+            if overtime_and_absence_hour != "--":
+                if "加班" in overtime_and_absence_hour:
+                    # 用pattern提取加班小时数
+                    overtime_hours = re.search(OVERTIME_REGEX, overtime_and_absence_hour)
+                    if overtime_hours:
+                        # 提取出的overtime_hours格式为“加班3.0小时”，我只想要其中的整数部分
+                        overtime_hours = overtime_hours.group(1)
+                        # overtime_hours格式为“3.0”，是字符串，转换为整数
+                        overtime_hours = int(float(overtime_hours))
+                        EW_JSON_DATA[reportTime] = EW_JSON_DATA[reportTime] + overtime_hours
+                        OVERTIME_HOURS += overtime_hours
+                if "假" in overtime_and_absence_hour:
+                    # 用pattern提取假勤小时数
+                    absence_hours = re.search(ABSENCE_REGEX, overtime_and_absence_hour)
+                    if absence_hours:
+                        # 提取出的absence_hours格式为“假3.0小时”，我只想要其中的整数部分
+                        absence_hours = absence_hours.group(1)
+                        # 提取出的absence_hours格式为“3.0”，我只想要其中的整数部分
+                        absence_hours = absence_hours.split(".")[0]
+                        if absence_hours:
+                            absence_hours = int(float(absence_hours))
+                            EW_JSON_DATA[reportTime] = EW_JSON_DATA[reportTime] - absence_hours    
+                            ABSENCE_HOURS += absence_hours
     except Exception as e:
         messagebox.showerror("错误", f"处理文件时发生错误: {e}")
-        return 0
 
-def calculate_base_hours(file_path):
-    base_hours = calculate_hours(file_path, "标准工作时长(小时)", r'(\d+\.?\d*)')
-    return base_hours
+def calculate_base_overtime_absence_hours(file_path):
+    calculate_hours(file_path)
 
-def calculate_overtime_hours(file_path):
-    return calculate_hours(file_path, "假勤申请", r'加班(\d+\.\d+)小时')
 
-def calculate_absence_hours(file_path):
-    return calculate_hours(file_path, "假勤申请", r'假(\d+\.\d+)小时')
 
 def select_file(filetypes, startswith, endswith):
     global QUERY_START_TIME, QUERY_END_TIME
@@ -147,9 +101,10 @@ def open_file():
             return None
         
         # 计算加班时长 和 总工时
-        base_hours = calculate_base_hours(file_path)
-        overtime_hours = calculate_overtime_hours(file_path)
-        absence_hours = calculate_absence_hours(file_path)
+        calculate_base_overtime_absence_hours(file_path)
+        base_hours = BASE_HOURS
+        overtime_hours = OVERTIME_HOURS
+        absence_hours = ABSENCE_HOURS
         total_hours = base_hours + overtime_hours - absence_hours # 计算总工时
         if overtime_hours is not None:
             # 将加班时长显示在文本框中
@@ -173,15 +128,12 @@ def open_file():
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
 def open_ew_file():
-    global DIFF_EW_FILE_PATH  # 声明为全局变量
- 
     file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
     if file_path:
         if file_path == "file_path is empty":
             return None
         
         dif_text.delete(1.0, tk.END)
-        DIFF_EW_FILE_PATH = file_path
     else:
         messagebox.showerror("文件选择错误", "请选择从 企业微信 导出的文件\n 格式为 “上下班打卡_日报_20250301-20250331.xlsx")
 
