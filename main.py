@@ -15,6 +15,8 @@ DIFF_EW_FILE_PATH = ""
 key_sequence = []  # 用于存储按键序列，彩蛋
 UMS_DATA = {} # 用于存储ums数据
 EW_JSON_DATA = {} # 用于存储企业微信导出的json数据
+QUERY_START_TIME = ""
+QUERY_END_TIME = ""
 
 # 用于将企业微信导出的excel数据转换为json格式,方便同ums导出的json数据比较
 def ew_excel_to_json(excel_data, column_name, pattern=None):
@@ -131,11 +133,22 @@ def select_file(filetypes, startswith, endswith):
         return None
 
 def open_file():
+    global QUERY_START_TIME, QUERY_END_TIME
     file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
     if file_path:
         # 如果选择文件对话框中点击取消
         if file_path == "file_path is empty":
             return None
+        
+        # 获取file_path文件名中的开始和结束日期，格式为“上下班打卡_日报_20250701-20250731.xlsx”，最后将日记转换为'2025-07-01'
+        file_name = os.path.basename(file_path)
+        file_name = file_name.split(".")[0]
+        file_name = file_name.split("_")[2]
+        QUERY_START_TIME = file_name.split("-")[0]
+        QUERY_END_TIME = file_name.split("-")[1]
+        # 转换为'2025-07-01'格式
+        QUERY_START_TIME = QUERY_START_TIME[:4] + "-" + QUERY_START_TIME[4:6] + "-" + QUERY_START_TIME[6:]
+        QUERY_END_TIME = QUERY_END_TIME[:4] + "-" + QUERY_END_TIME[4:6] + "-" + QUERY_END_TIME[6:]
         
         # 计算加班时长 和 总工时
         base_hours = calculate_base_hours(file_path)
@@ -322,19 +335,13 @@ def get_ums_worktime():
     if remember_var.get():
         save_config(ums_account, ums_password)
     
-    # 计算当前月份的起止日期（示例：当前月1号到月底）
-    today = datetime.today()
-    first_day = today.replace(day=1).strftime('%Y-%m-%d')
-    last_day = (today.replace(day=1) + timedelta(days=32)).replace(day=1) - timedelta(days=1)
-    last_day = last_day.strftime('%Y-%m-%d')
-    
     # 调用attendance_fetcher获取数据
     try:
         ums_data = attendance_fetcher.fetch_attendance_data(
             username=ums_account,
             password=ums_password,
-            begin_time='2025-07-01',
-            end_time='2025-07-31'
+            begin_time=QUERY_START_TIME,
+            end_time=QUERY_END_TIME
         )
 
         # 只提取rows部分的数据
