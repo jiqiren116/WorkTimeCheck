@@ -5,7 +5,6 @@ from tkinter import filedialog
 from tkinter import messagebox
 import re
 import attendance_fetcher  # 导入attendance_fetcher模块
-from datetime import datetime, timedelta  # 添加日期处理依赖
 import json
 
 # 添加配置文件路径常量
@@ -96,7 +95,7 @@ def calculate_hours(file_path, column_name, pattern):
         hours_data = hours_data.dropna()  # 删除包含 NaN 的行
 
         # 保留整数部分
-        hours_data = hours_data[0].astype(int)
+        hours_data = hours_data[0].round().astype(int)
 
         # 求和
         result_hours = hours_data.sum()
@@ -107,9 +106,7 @@ def calculate_hours(file_path, column_name, pattern):
         return 0
 
 def calculate_base_hours(file_path):
-    # r'(\d+)\.?\d*'表示如果原123.45，678，901.23，会提取123，678，901
-    temp_base_hours = calculate_hours(file_path, "标准工作时长(小时)", r'(\d+)\.?\d*')
-    base_hours = int(temp_base_hours + temp_base_hours / 7)
+    base_hours = calculate_hours(file_path, "标准工作时长(小时)", r'(\d+\.?\d*)')
     return base_hours
 
 def calculate_overtime_hours(file_path):
@@ -119,6 +116,7 @@ def calculate_absence_hours(file_path):
     return calculate_hours(file_path, "假勤申请", r'假(\d+\.\d+)小时')
 
 def select_file(filetypes, startswith, endswith):
+    global QUERY_START_TIME, QUERY_END_TIME
     # 打开文件选择对话框
     file_path = filedialog.askopenfilename(filetypes=filetypes)
     
@@ -126,20 +124,6 @@ def select_file(filetypes, startswith, endswith):
     file_name = os.path.basename(file_path)
     # 判断file_name是否满足条件
     if file_path and file_name.startswith(startswith) and file_name.endswith(endswith):
-        return file_path
-    elif file_path == "": # 处理选择文件对话框中点击取消的情况
-        return "file_path is empty" 
-    else:
-        return None
-
-def open_file():
-    global QUERY_START_TIME, QUERY_END_TIME
-    file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
-    if file_path:
-        # 如果选择文件对话框中点击取消
-        if file_path == "file_path is empty":
-            return None
-        
         # 获取file_path文件名中的开始和结束日期，格式为“上下班打卡_日报_20250701-20250731.xlsx”，最后将日记转换为'2025-07-01'
         file_name = os.path.basename(file_path)
         file_name = file_name.split(".")[0]
@@ -149,6 +133,18 @@ def open_file():
         # 转换为'2025-07-01'格式
         QUERY_START_TIME = QUERY_START_TIME[:4] + "-" + QUERY_START_TIME[4:6] + "-" + QUERY_START_TIME[6:]
         QUERY_END_TIME = QUERY_END_TIME[:4] + "-" + QUERY_END_TIME[4:6] + "-" + QUERY_END_TIME[6:]
+        return file_path
+    elif file_path == "": # 处理选择文件对话框中点击取消的情况
+        return "file_path is empty" 
+    else:
+        return None
+
+def open_file():
+    file_path = select_file([("Excel files", "*.xlsx *.xls")], "上下班打卡", ".xlsx")
+    if file_path:
+        # 如果选择文件对话框中点击取消
+        if file_path == "file_path is empty":
+            return None
         
         # 计算加班时长 和 总工时
         base_hours = calculate_base_hours(file_path)
@@ -507,14 +503,6 @@ def create_gui():
     # open_ums_file_button.pack(side=tk.LEFT, padx=5)
     open_ew_file_button2 = tk.Button(diff_frame, text="工时比对", command=work_hours_compare)
     open_ew_file_button2.pack(side=tk.LEFT, padx=5)
-
-    # 对比执行区域
-    # diff_frame2 = tk.Frame(root)
-    # diff_frame2.pack(pady=10)
-    # diff_label = tk.Label(diff_frame2, text="选中两个文件后，点击执行对比，查看差异:")
-    # diff_label.pack(side=tk.LEFT)
-    # execute_diff_button = tk.Button(diff_frame2, text="执行对比", command=process_ums_file)
-    # execute_diff_button.pack(side=tk.LEFT, padx=5)
 
     # 差异结果显示区域
     dif_text = tk.Text(root, height=100, width=320)
