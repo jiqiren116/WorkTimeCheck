@@ -276,11 +276,6 @@ def get_ums_worktime():
         messagebox.showwarning("提示", "请输入账号和密码")
         return None
     
-    # 如果勾选了记住账号密码，则保存
-    if remember_var.get():
-        save_config(ums_account, ums_password)
-    
-    # 调用attendance_fetcher获取数据
     try:
         ums_data = attendance_fetcher.fetch_attendance_data(
             username=ums_account,
@@ -335,7 +330,19 @@ def create_gui():
         """当密码输入框内容发生变化时调用"""
         if remember_var.get():
             remember_var.set(False)
-    
+
+    def on_remember_toggle():
+        """当记住账号密码复选框状态变化时调用"""
+        if remember_var.get():
+            # 获取当前输入的账号密码
+            account = ums_account_entry.get().strip()
+            password = ums_password_entry.get().strip()
+            if account and password:
+                save_config(account, password)
+            else:
+                messagebox.showwarning("提示", "账号和密码不能为空")
+                remember_var.set(False)
+
     # 创建主窗口
     root = tk.Tk()
     root.title("工时统计工具")
@@ -416,12 +423,12 @@ def create_gui():
     
     # 添加记住账号密码选项
     remember_var = tk.BooleanVar()
-    remember_check = tk.Checkbutton(right_frame, text="记住账号密码", variable=remember_var)
+    remember_check = tk.Checkbutton(right_frame, text="记住账号密码", variable=remember_var, command=on_remember_toggle)
     remember_check.pack(pady=5)
 
     # 加载保存的配置
     load_config()
-    
+
     # 获取ums工时按钮
     get_ums_worktime_button = tk.Button(right_frame, text="获取UMS工时", command=get_ums_worktime)
     get_ums_worktime_button.pack(pady=20)
