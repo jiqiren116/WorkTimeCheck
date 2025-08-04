@@ -6,9 +6,9 @@ from tkinter import messagebox
 import re
 import attendance_fetcher  # 导入attendance_fetcher模块
 import json
+import winreg  # 添加Windows注册表操作模块
 
-# 添加配置文件路径常量
-CONFIG_FILE = "config.json"
+# 添加配置文件路径常量 - 已移除，使用注册表存储配置
 key_sequence = []  # 用于存储按键序列，彩蛋
 UMS_DATA = {} # 用于存储ums数据
 EW_JSON_DATA = {} # 用于存储企业微信导出的json数据
@@ -230,25 +230,33 @@ def calculate_ums_total_worktime(data):
 
 # 添加配置文件读写函数
 def load_config():
-    """加载保存的账号密码配置"""
-    if os.path.exists(CONFIG_FILE):
-        try:
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                config = json.load(f)
-                ums_account_entry.insert(0, config.get('account', ''))
-                ums_password_entry.insert(0, config.get('password', ''))
-                remember_var.set(True)
-        except Exception as e:
-            print(f"加载配置失败: {e}")
+    """从系统注册表加载保存的账号密码配置"""
+    try:
+        # 打开注册表项
+        key = winreg.OpenKeyEx(winreg.HKEY_CURRENT_USER, r"Software\WorkTimeCheck", 0, winreg.KEY_READ)
+        # 读取账号和密码
+        account, _ = winreg.QueryValueEx(key, "Account")
+        password, _ = winreg.QueryValueEx(key, "Password")
+        winreg.CloseKey(key)
+        # 填充到输入框
+        ums_account_entry.insert(0, account)
+        ums_password_entry.insert(0, password)
+        remember_var.set(True)
+    except FileNotFoundError:
+        # 注册表项不存在，不做处理
+        pass
+    except Exception as e:
+        print(f"加载配置失败: {e}")
 
 def save_config(account, password):
-    """保存账号密码到配置文件"""
+    """保存账号密码到系统注册表"""
     try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump({
-                'account': account,
-                'password': password
-            }, f, ensure_ascii=False, indent=4)
+        # 打开或创建注册表项
+        key = winreg.CreateKeyEx(winreg.HKEY_CURRENT_USER, r"Software\WorkTimeCheck", 0, winreg.KEY_WRITE)
+        # 设置账号和密码值
+        winreg.SetValueEx(key, "Account", 0, winreg.REG_SZ, account)
+        winreg.SetValueEx(key, "Password", 0, winreg.REG_SZ, password)
+        winreg.CloseKey(key)
     except Exception as e:
         messagebox.showerror("错误", f"保存配置失败: {e}")
 
